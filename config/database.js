@@ -32,7 +32,7 @@ const connectDB = async () => {
     };
 
     // Connect to MongoDB
-    const connection = await mongoose.connect(process.env.MONGODB_URI, options);
+    const connection = await mongoose.connect(process.env.MONGODB_URI||"mongodb+srv://admin:admin@cluster0.aewgwmo.mongodb.net/", options);
     
     console.log(`MongoDB connected: ${connection.connection.host}`);
     

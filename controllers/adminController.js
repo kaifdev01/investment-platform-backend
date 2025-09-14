@@ -1,5 +1,6 @@
 const Deposit = require('../models/Deposit');
 const User = require('../models/User');
+const Invitation = require('../models/Invitation');
 const blockchainService = require('../services/blockchainService');
 
 // Manual deposit processing for testing
@@ -26,6 +27,23 @@ exports.processDeposit = async (req, res) => {
     const user = await User.findById(deposit.userId._id);
     user.balance += deposit.amount;
     await user.save();
+    
+    // Process referral reward (5% of deposit)
+    const invitation = await Invitation.findOne({ 
+      code: user.invitationCode 
+    }).populate('createdBy');
+    
+    if (invitation && invitation.createdBy) {
+      const referrer = invitation.createdBy;
+      const rewardAmount = deposit.amount * 0.05; // 5% referral reward
+      
+      referrer.referralRewards += rewardAmount;
+      referrer.balance += rewardAmount;
+      referrer.totalEarnings += rewardAmount;
+      await referrer.save();
+      
+      console.log(`Referral reward: $${rewardAmount} given to ${referrer.email}`);
+    }
     
     res.json({ 
       message: 'Deposit processed successfully',

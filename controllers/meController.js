@@ -8,7 +8,8 @@ exports.getMe = async (req, res) => {
         firstName: user.firstName, 
         lastName: user.lastName,
         phone: user.phone,
-        depositAddress: user.depositAddress
+        depositAddress: user.depositAddress,
+        isAdmin: user.isAdmin || false
       } 
     });
   } catch (error) {

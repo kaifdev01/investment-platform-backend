@@ -6,8 +6,7 @@ const authRoutes = require('./routes/auth');
 const invitationRoutes = require('./routes/invitations');
 const adminRoutes = require('./routes/admin');
 const userRoutes = require('./routes/user');
-const { startBlockchainMonitoring } = require('./jobs/blockchainMonitor');
-const { startAutoDepositProcessing } = require('./jobs/autoDepositProcessor');
+const cronRoutes = require('./routes/cron');
 
 const app = express();
 app.use(cors({
@@ -22,6 +21,7 @@ app.use('/api', authRoutes);
 app.use('/api/invitations', invitationRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/cron', cronRoutes);
 
 app.get("/", (req, res) => {
   res.send("Hello, World!");
@@ -30,8 +30,5 @@ app.get("/", (req, res) => {
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  // Start blockchain monitoring
-  startBlockchainMonitoring();
-  // Start automatic deposit processing
-  startAutoDepositProcessing();
+  console.log('Auto deposit processing available at /api/cron/process-deposits');
 });

@@ -1,7 +1,7 @@
 const express = require('express');
 const { generateInvitation } = require('../controllers/userController');
 const { getDashboard, getReferrals } = require('../controllers/dashboardController');
-const { getInvestmentTiers, createInvestment } = require('../controllers/investmentController');
+const { getInvestmentTiers, createInvestment, completeCycle } = require('../controllers/investmentController');
 const { getMe } = require('../controllers/meController');
 const { updateProfile } = require('../controllers/profileController');
 const { simulateDeposit, getDepositHistory, processDeposit } = require('../controllers/depositController');
@@ -16,6 +16,7 @@ router.get('/dashboard', auth, getDashboard);
 router.get('/referrals', auth, getReferrals);
 router.get('/investment-tiers', auth, getInvestmentTiers);
 router.post('/invest', auth, createInvestment);
+router.post('/complete-cycle', auth, completeCycle);
 router.get('/me', auth, getMe);
 router.put('/profile', auth, updateProfile);
 router.post('/simulate-deposit', auth, simulateDeposit);

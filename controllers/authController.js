@@ -25,7 +25,7 @@ exports.sendCode = async (req, res) => {
     }
 
     const code = generateCode();
-    const expiresAt = Date.now() + 3 * 60 * 1000; // 3 minutes
+    const expiresAt = Date.now() + 15 * 60 * 1000; // 3 minutes
 
     // Store code temporarily
     verificationCodes.set(email, { code, expiresAt });
@@ -33,8 +33,8 @@ exports.sendCode = async (req, res) => {
 
     const emailSent = await sendVerificationCode(email, code);
 
-    res.json({ 
-      message: emailSent ? "Verification code sent to email" : "Check server console for verification code", 
+    res.json({
+      message: emailSent ? "Verification code sent to email" : "Check server console for verification code",
       email,
       devCode: process.env.NODE_ENV === 'development' ? code : undefined
     });
@@ -79,19 +79,22 @@ exports.register = async (req, res) => {
     // Check verification code from temporary storage
     const storedCode = verificationCodes.get(email);
     console.log('Verification check:', { email, verificationCode, storedCode });
-    
+
     // Development bypass: accept '123456' as universal code
-    if (verificationCode === '123456') {
+    if (verificationCode === '123456') { // ✅ DEV MODE: bypass verification code
+      if (!process.env.NODE_ENV === 'development') {
+        return res.status(400).json({ error: "Verification code not found. Use '123456' for testing or request a new code." });
+      }
       console.log('🔧 DEV MODE: Using universal verification code');
     } else {
       if (!storedCode) {
         return res.status(400).json({ error: "Verification code not found. Use '123456' for testing or request a new code." });
       }
-      
+
       if (storedCode.code !== verificationCode) {
         return res.status(400).json({ error: "Invalid verification code. Use '123456' for testing." });
       }
-      
+
       if (Date.now() > storedCode.expiresAt) {
         verificationCodes.delete(email);
         return res.status(400).json({ error: "Verification code expired. Use '123456' for testing or request a new code." });
@@ -112,6 +115,9 @@ exports.register = async (req, res) => {
       return res.status(400).json({ error: "Invalid invitation code" });
     }
 
+    // Find referrer (who created the invitation)
+    const referrer = await User.findById(invitation.createdBy);
+
     // Create new user
     const user = new User({
       firstName,
@@ -121,10 +127,36 @@ exports.register = async (req, res) => {
       password,
       withdrawalPassword,
       invitationCode,
+      referredBy: referrer._id,
       isVerified: true
     });
 
     await user.save();
+
+    // Build referral tree
+    if (referrer) {
+      // Add to Level 1 of referrer
+      referrer.referralLevel1.push(user._id);
+
+      // Find Level 2 referrer (referrer's referrer)
+      if (referrer.referredBy) {
+        const level2Referrer = await User.findById(referrer.referredBy);
+        if (level2Referrer) {
+          level2Referrer.referralLevel2.push(user._id);
+
+          // Find Level 3 referrer
+          if (level2Referrer.referredBy) {
+            const level3Referrer = await User.findById(level2Referrer.referredBy);
+            if (level3Referrer) {
+              level3Referrer.referralLevel3.push(user._id);
+              await level3Referrer.save();
+            }
+          }
+          await level2Referrer.save();
+        }
+      }
+      await referrer.save();
+    }
 
     // Remove verification code from temporary storage
     verificationCodes.delete(email);

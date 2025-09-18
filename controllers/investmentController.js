@@ -1,6 +1,7 @@
 const Investment = require('../models/Investment');
 const User = require('../models/User');
 const Withdrawal = require('../models/Withdrawal');
+const { distributeReferralRewards } = require('../services/referralService');
 
 const investmentTiers = [
   { amount: 1000, tier: 'Starter', dailyRate: 3.30 },
@@ -59,17 +60,11 @@ exports.createInvestment = async (req, res) => {
       return res.status(400).json({ error: 'Insufficient balance' });
     }
 
-    // Start cycle immediately (5 minutes for testing)
-    const cycleStartTime = new Date();
-    const cycleEndTime = new Date(cycleStartTime.getTime() + 5 * 60 * 1000); // 5 minutes
-
     const investment = new Investment({
       userId: req.user._id,
       amount: tier.amount,
       tier: tier.tier,
-      dailyRate: tier.dailyRate,
-      cycleStartTime,
-      cycleEndTime
+      dailyRate: tier.dailyRate
     });
 
     await investment.save();
@@ -99,20 +94,23 @@ exports.completeCycle = async (req, res) => {
       return res.status(400).json({ error: 'Cycle not completed yet' });
     }
 
-    // Calculate earnings
-    const dailyEarning = (investment.amount * investment.dailyRate) / 100;
+    // Calculate earnings (daily rate for 8 hours = dailyRate/3)
+    const earningAmount = (investment.amount * investment.dailyRate) / 300; // 8 hours = 1/3 day
     
-    investment.totalEarned += dailyEarning;
+    investment.totalEarned += earningAmount;
     investment.cyclesCompleted += 1;
     investment.canWithdraw = true;
+    investment.earningCompleted = true;
     investment.cycleStartTime = null;
     investment.cycleEndTime = null;
     
     await investment.save();
 
+    // Note: Referral rewards will be distributed when admin approves withdrawal
+
     res.json({ 
-      message: 'Cycle completed! You can now request withdrawal.',
-      earning: dailyEarning,
+      message: 'Earning cycle completed! You can now request withdrawal.',
+      earning: earningAmount,
       totalEarned: investment.totalEarned
     });
   } catch (error) {

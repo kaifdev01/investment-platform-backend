@@ -9,6 +9,7 @@ const auth = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
     const user = await User.findById(decoded.userId);
     if (!user) return res.status(401).json({ error: 'Invalid token' });
+    if (user.isBlocked) return res.status(403).json({ error: 'Your account has been blocked. Please contact support.' });
 
     req.user = user;
     next();

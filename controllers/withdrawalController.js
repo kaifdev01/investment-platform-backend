@@ -111,6 +111,17 @@ exports.approveWithdrawal = async (req, res) => {
     user.totalEarnings += withdrawal.amount;
     await user.save();
 
+    // Set 48-hour waiting period for next cycle
+    const investment = await Investment.findById(withdrawal.investmentId);
+    const now = new Date();
+    investment.withdrawalApprovedAt = now;
+    investment.nextCycleAvailableAt = new Date(now.getTime() + 48 * 60 * 60 * 1000); // 48 hours
+    await investment.save();
+
+    // Distribute referral rewards when admin approves withdrawal
+    const { distributeReferralRewards } = require('../services/referralService');
+    await distributeReferralRewards(withdrawal.userId._id, withdrawal.amount);
+
     res.json({ message: 'Withdrawal approved successfully' });
   } catch (error) {
     res.status(400).json({ error: error.message });

@@ -80,25 +80,17 @@ exports.register = async (req, res) => {
     const storedCode = verificationCodes.get(email);
     console.log('Verification check:', { email, verificationCode, storedCode });
 
-    // Development bypass: accept '123456' as universal code
-    if (verificationCode === '123456') { // ✅ DEV MODE: bypass verification code
-      if (!process.env.NODE_ENV === 'development') {
-        return res.status(400).json({ error: "Verification code not found. Use '123456' for testing or request a new code." });
-      }
-      console.log('🔧 DEV MODE: Using universal verification code');
-    } else {
-      if (!storedCode) {
-        return res.status(400).json({ error: "Verification code not found. Use '123456' for testing or request a new code." });
-      }
+    if (!storedCode) {
+      return res.status(400).json({ error: "Verification code not found. Please request a new code." });
+    }
 
-      if (storedCode.code !== verificationCode) {
-        return res.status(400).json({ error: "Invalid verification code. Use '123456' for testing." });
-      }
+    if (storedCode.code !== verificationCode) {
+      return res.status(400).json({ error: "Invalid verification code." });
+    }
 
-      if (Date.now() > storedCode.expiresAt) {
-        verificationCodes.delete(email);
-        return res.status(400).json({ error: "Verification code expired. Use '123456' for testing or request a new code." });
-      }
+    if (Date.now() > storedCode.expiresAt) {
+      verificationCodes.delete(email);
+      return res.status(400).json({ error: "Verification code expired. Please request a new code." });
     }
 
     // Check if email already exists

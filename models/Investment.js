@@ -13,7 +13,11 @@ const investmentSchema = new mongoose.Schema({
   cycleStartTime: { type: Date },
   cycleEndTime: { type: Date },
   canWithdraw: { type: Boolean, default: false },
-  withdrawalRequestedAt: { type: Date }
+  withdrawalRequestedAt: { type: Date },
+  earningStarted: { type: Boolean, default: false },
+  earningCompleted: { type: Boolean, default: false },
+  withdrawalApprovedAt: { type: Date },
+  nextCycleAvailableAt: { type: Date }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Investment', investmentSchema);

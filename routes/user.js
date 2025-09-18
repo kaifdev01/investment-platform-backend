@@ -1,4 +1,5 @@
 const express = require('express');
+const User = require('../models/User');
 const { generateInvitation } = require('../controllers/userController');
 const { getDashboard, getReferrals } = require('../controllers/dashboardController');
 const { getInvestmentTiers, createInvestment, completeCycle } = require('../controllers/investmentController');
@@ -14,9 +15,77 @@ const router = express.Router();
 router.post('/generate-invitation', auth, generateInvitation);
 router.get('/dashboard', auth, getDashboard);
 router.get('/referrals', auth, getReferrals);
+router.get('/referral-tree', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id)
+      .populate('referralLevel1', 'firstName lastName email createdAt')
+      .populate('referralLevel2', 'firstName lastName email createdAt')
+      .populate('referralLevel3', 'firstName lastName email createdAt');
+    
+    const level1 = user.referralLevel1 || [];
+    const level2 = user.referralLevel2 || [];
+    const level3 = user.referralLevel3 || [];
+    
+    res.json({
+      level1,
+      level2,
+      level3,
+      totalReferrals: level1.length + level2.length + level3.length,
+      hasReferrals: level1.length > 0 || level2.length > 0 || level3.length > 0
+    });
+  } catch (error) {
+    console.error('Referral tree error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 router.get('/investment-tiers', auth, getInvestmentTiers);
 router.post('/invest', auth, createInvestment);
 router.post('/complete-cycle', auth, completeCycle);
+router.post('/start-earning', auth, async (req, res) => {
+  try {
+    const { investmentId } = req.body;
+    const Investment = require('../models/Investment');
+    
+    const investment = await Investment.findOne({ _id: investmentId, userId: req.user.id });
+    if (!investment) {
+      return res.status(404).json({ error: 'Investment not found' });
+    }
+    
+    // Check if this is a new cycle after withdrawal approval
+    if (investment.withdrawalApprovedAt && investment.nextCycleAvailableAt) {
+      if (new Date() < investment.nextCycleAvailableAt) {
+        return res.status(400).json({ error: 'Next cycle not available yet. Please wait 48 hours after withdrawal approval.' });
+      }
+      // Reset for new cycle
+      investment.earningStarted = false;
+      investment.earningCompleted = false;
+      investment.canWithdraw = false;
+      investment.withdrawalRequestedAt = null;
+      investment.withdrawalApprovedAt = null;
+      investment.nextCycleAvailableAt = null;
+      investment.totalEarned = 0;
+      investment.withdrawalPending = false;
+    }
+    
+    if (investment.earningStarted && !investment.earningCompleted) {
+      return res.status(400).json({ error: 'Earning cycle already started' });
+    }
+    
+    const now = new Date();
+    const endTime = new Date(now.getTime() + 1 * 60 * 1000); // 1 minute
+    
+    investment.earningStarted = true;
+    investment.earningCompleted = false;
+    investment.cycleStartTime = now;
+    investment.cycleEndTime = endTime;
+    investment.withdrawalPending = false;
+    await investment.save();
+    
+    res.json({ message: 'Earning cycle started!', investment });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 router.get('/me', auth, getMe);
 router.put('/profile', auth, updateProfile);
 router.post('/simulate-deposit', auth, simulateDeposit);
@@ -44,6 +113,117 @@ router.get('/admin/pending-deposits', auth, async (req, res) => {
       .populate('userId', 'email firstName lastName')
       .sort({ createdAt: -1 });
     res.json({ deposits });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Block/Unblock user
+router.post('/admin/toggle-block/:userId', auth, async (req, res) => {
+  try {
+    const User = require('../models/User');
+    const user = await User.findById(req.params.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    user.isBlocked = !user.isBlocked;
+    await user.save();
+    res.json({ message: `User ${user.isBlocked ? 'blocked' : 'unblocked'} successfully` });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Debug referral data
+router.get('/debug/referrals/:userId?', auth, async (req, res) => {
+  try {
+    const userId = req.params.userId || req.user._id;
+    const user = await User.findById(userId)
+      .populate('referredBy', 'firstName lastName email')
+      .populate('referralLevel1', 'firstName lastName email')
+      .populate('referralLevel2', 'firstName lastName email')
+      .populate('referralLevel3', 'firstName lastName email');
+    
+    res.json({
+      user: {
+        id: user._id,
+        name: `${user.firstName} ${user.lastName}`,
+        email: user.email
+      },
+      referredBy: user.referredBy,
+      referralLevel1: user.referralLevel1,
+      referralLevel2: user.referralLevel2,
+      referralLevel3: user.referralLevel3,
+      counts: {
+        level1: user.referralLevel1?.length || 0,
+        level2: user.referralLevel2?.length || 0,
+        level3: user.referralLevel3?.length || 0
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// System Analytics
+router.get('/admin/analytics', auth, async (req, res) => {
+  try {
+    const User = require('../models/User');
+    const Investment = require('../models/Investment');
+    const Deposit = require('../models/Deposit');
+    
+    const { period = '30' } = req.query;
+    const daysBack = parseInt(period);
+    const dateAgo = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000);
+    const dateFormat = "%Y-%m-%d";
+    
+    // User growth
+    const userGrowth = await User.aggregate([
+      { $match: { createdAt: { $gte: dateAgo } } },
+      { $group: {
+        _id: { $dateToString: { format: dateFormat, date: "$createdAt" } },
+        count: { $sum: 1 }
+      }},
+      { $sort: { _id: 1 } }
+    ]);
+    
+    // Investment trends
+    const investmentTrends = await Investment.aggregate([
+      { $match: { createdAt: { $gte: dateAgo } } },
+      { $group: {
+        _id: { $dateToString: { format: dateFormat, date: "$createdAt" } },
+        totalAmount: { $sum: "$amount" },
+        count: { $sum: 1 }
+      }},
+      { $sort: { _id: 1 } }
+    ]);
+    
+    // Deposit trends
+    const depositTrends = await Deposit.aggregate([
+      { $match: { createdAt: { $gte: dateAgo }, status: 'confirmed' } },
+      { $group: {
+        _id: { $dateToString: { format: dateFormat, date: "$createdAt" } },
+        totalAmount: { $sum: "$amount" },
+        count: { $sum: 1 }
+      }},
+      { $sort: { _id: 1 } }
+    ]);
+    
+    // Summary stats
+    const totalUsers = await User.countDocuments();
+    const totalInvestments = await Investment.aggregate([{ $group: { _id: null, total: { $sum: "$amount" } } }]);
+    const totalDeposits = await Deposit.aggregate([{ $match: { status: 'confirmed' } }, { $group: { _id: null, total: { $sum: "$amount" } } }]);
+    
+    res.json({
+      userGrowth,
+      investmentTrends,
+      depositTrends,
+      summary: {
+        totalUsers,
+        totalInvestments: totalInvestments[0]?.total || 0,
+        totalDeposits: totalDeposits[0]?.total || 0
+      }
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

@@ -36,11 +36,9 @@ exports.updateProfile = async (req, res) => {
       updateData.password = newPassword;
     }
 
-    const updatedUser = await User.findByIdAndUpdate(
-      req.user._id,
-      updateData,
-      { new: true, runValidators: false }
-    );
+    // Update user and trigger pre-save middleware for password hashing
+    Object.assign(user, updateData);
+    const updatedUser = await user.save();
 
     res.json({ 
       message: 'Profile updated successfully',

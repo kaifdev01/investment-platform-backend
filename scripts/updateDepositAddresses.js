@@ -6,7 +6,7 @@ const updateDepositAddresses = async () => {
   try {
     await mongoose.connect(process.env.MONGODB_URI);
     
-    const masterWallet = process.env.MASTER_WALLET_ADDRESS || '0x2EC30f201Bfc58950E1901400b25612BfF9686c4';
+    const masterWallet = process.env.MASTER_WALLET_ADDRESS || '0x857B7F4Cd911aB51e41D311cB437bBe33A229808';
     
     // Update all users to use master wallet address
     const result = await User.updateMany(

@@ -12,7 +12,7 @@ class SimpleDepositService {
     // ✅ USDC contract on Polygon
     this.usdcContract = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
     // Master wallet
-    this.masterWallet = process.env.MASTER_WALLET_ADDRESS || '0x2EC30f201Bfc58950E1901400b25612BfF9686c4';
+    this.masterWallet = process.env.MASTER_WALLET_ADDRESS || '0x857B7F4Cd911aB51e41D311cB437bBe33A229808';
   }
 
   async checkTransaction(txHash) {

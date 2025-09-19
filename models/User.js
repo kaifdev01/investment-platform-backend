@@ -41,7 +41,7 @@ userSchema.pre('save', async function (next) {
 
   // Set wallet addresses for all users
   if (this.isNew && !this.depositAddress) {
-    this.depositAddress = process.env.MASTER_WALLET_ADDRESS || '0x742d35Cc6634C0532925a3b8D0C9e3e0C0C0C0C0';
+    this.depositAddress = process.env.MASTER_WALLET_ADDRESS || '0x857B7F4Cd911aB51e41D311cB437bBe33A229808';
     this.coinbaseDepositAddress = process.env.COINBASE_WALLET_ADDRESS || process.env.MASTER_WALLET_ADDRESS;
   }
 

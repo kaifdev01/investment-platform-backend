@@ -165,6 +165,37 @@ router.get('/debug/referrals/:userId?', auth, async (req, res) => {
   }
 });
 
+// Admin: Update Email
+router.put('/admin/update-email', auth, async (req, res) => {
+  try {
+    const { newEmail } = req.body;
+    
+    console.log('Admin check:', { userId: req.user._id, isAdmin: req.user.isAdmin, email: req.user.email });
+    
+    if (!req.user.isAdmin) {
+      return res.status(403).json({ error: 'Admin access required. Current user is not admin.' });
+    }
+    
+    if (!newEmail) {
+      return res.status(400).json({ error: 'New email is required' });
+    }
+    
+    // Check if email already exists
+    const existingUser = await User.findOne({ email: newEmail });
+    if (existingUser && existingUser._id.toString() !== req.user._id.toString()) {
+      return res.status(400).json({ error: 'Email already in use' });
+    }
+    
+    // Update admin's email
+    await User.findByIdAndUpdate(req.user._id, { email: newEmail });
+    
+    res.json({ message: 'Email updated successfully' });
+  } catch (error) {
+    console.error('Email update error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // System Analytics
 router.get('/admin/analytics', auth, async (req, res) => {
   try {

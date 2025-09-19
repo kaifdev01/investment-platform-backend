@@ -72,7 +72,7 @@ router.post('/start-earning', auth, async (req, res) => {
     }
     
     const now = new Date();
-    const endTime = new Date(now.getTime() + 1 * 60 * 1000); // 1 minute
+    const endTime = new Date(now.getTime() + 8 * 60 * 60 * 1000); // 8 hours
     
     investment.earningStarted = true;
     investment.earningCompleted = false;

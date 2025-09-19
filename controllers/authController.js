@@ -171,6 +171,8 @@ exports.register = async (req, res) => {
         lastName: user.lastName,
         phone: user.phone,
         isAdmin: user.isAdmin || false,
+        depositAddress: user.depositAddress,
+        coinbaseDepositAddress: user.coinbaseDepositAddress,
       },
     });
   } catch (err) {
@@ -194,6 +196,12 @@ exports.login = async (req, res) => {
     }
 
     const token = generateToken(user._id);
+    // Update coinbaseDepositAddress if not set
+    if (!user.coinbaseDepositAddress) {
+      user.coinbaseDepositAddress = process.env.COINBASE_WALLET_ADDRESS || process.env.MASTER_WALLET_ADDRESS;
+      await user.save();
+    }
+    
     res.json({
       token,
       user: {
@@ -203,6 +211,8 @@ exports.login = async (req, res) => {
         lastName: user.lastName,
         phone: user.phone,
         isAdmin: user.isAdmin || false,
+        depositAddress: user.depositAddress,
+        coinbaseDepositAddress: user.coinbaseDepositAddress,
       },
     });
   } catch (error) {

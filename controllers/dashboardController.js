@@ -5,6 +5,13 @@ const Invitation = require('../models/Invitation');
 exports.getDashboard = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
+    
+    // Update user's coinbaseDepositAddress if not set
+    if (!user.coinbaseDepositAddress) {
+      user.coinbaseDepositAddress = process.env.COINBASE_WALLET_ADDRESS || process.env.MASTER_WALLET_ADDRESS;
+      await user.save();
+    }
+    
     const investments = await Investment.find({ userId: req.user._id, status: 'Active' });
     
     res.json({

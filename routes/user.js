@@ -72,6 +72,15 @@ router.post('/start-earning', auth, async (req, res) => {
     }
     
     const now = new Date();
+    const dayOfWeek = now.getDay(); // 0 = Sunday, 6 = Saturday
+    
+    // Block earning cycles on weekends (Saturday = 6, Sunday = 0)
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      return res.status(400).json({ 
+        error: 'Earning cycles are not available on weekends. Please try again on Monday.' 
+      });
+    }
+    
     const endTime = new Date(now.getTime() + 8 * 60 * 60 * 1000); // 8 hours
     
     investment.earningStarted = true;

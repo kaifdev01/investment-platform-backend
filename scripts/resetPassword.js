@@ -7,8 +7,8 @@ const resetPassword = async () => {
   try {
     await mongoose.connect(process.env.MONGODB_URI);
 
-    const email = 'infohprfarm@gmail.com';
-    const newPassword = 'HPrfarm@HPr'; // Change this to your desired password
+    const email = 'kaifm9096@gmail.com';
+    const newPassword = 'qwerty1122@'; // Change this to your desired password
 
     const user = await User.findOne({ email });
 
@@ -26,10 +26,10 @@ const resetPassword = async () => {
     // Manually hash the password
     const hashedPassword = await bcrypt.hash(newPassword, 12);
     console.log('🔐 Hashing password...');
-    
+
     // Update password directly in database
     await User.findByIdAndUpdate(user._id, { password: hashedPassword });
-    
+
     console.log('🔍 Password hash preview:', hashedPassword.substring(0, 20) + '...');
 
     console.log(`✅ Password reset successfully for ${email}`);

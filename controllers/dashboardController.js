@@ -20,6 +20,7 @@ exports.getDashboard = async (req, res) => {
         totalInvestment: user.totalInvestment,
         totalEarnings: user.totalEarnings,
         withdrawableBalance: user.withdrawableBalance,
+        balanceWithdrawn: user.balanceWithdrawn,
         referralRewards: user.referralRewards
       },
       activeInvestments: investments

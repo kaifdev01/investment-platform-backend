@@ -15,6 +15,16 @@ const withdrawalSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
+  feeAmount: {
+    type: Number,
+    required: true,
+    default: 0
+  },
+  netAmount: {
+    type: Number,
+    required: true,
+    default: 0
+  },
   walletAddress: {
     type: String,
     required: true

@@ -16,20 +16,26 @@ exports.requestWithdrawal = async (req, res) => {
       return res.status(400).json({ error: 'Withdrawal not available yet' });
     }
 
-    // Check if withdrawal already requested
+    // Check if withdrawal already requested for current cycle
     const existingWithdrawal = await Withdrawal.findOne({
       investmentId,
-      status: { $in: ['pending', 'approved'] }
+      status: 'pending' // Only check for pending withdrawals
     });
 
     if (existingWithdrawal) {
-      return res.status(400).json({ error: 'Withdrawal already requested' });
+      return res.status(400).json({ error: 'Withdrawal already requested for this cycle' });
     }
 
+    const originalAmount = investment.totalEarned;
+    const feeAmount = originalAmount * 0.15; // 15% fee
+    const netAmount = originalAmount - feeAmount;
+    
     const withdrawal = new Withdrawal({
       userId: req.user._id,
       investmentId,
-      amount: investment.totalEarned,
+      amount: originalAmount,
+      feeAmount: feeAmount,
+      netAmount: netAmount,
       walletAddress
     });
 
@@ -106,21 +112,25 @@ exports.approveWithdrawal = async (req, res) => {
     
     await withdrawal.save();
 
-    // Update user's totalEarnings when withdrawal is approved
-    const user = await User.findById(withdrawal.userId._id);
-    user.totalEarnings += withdrawal.amount;
+    // Update user's balances when withdrawal is approved
+    const user = await User.findById(withdrawal.userId._id || withdrawal.userId);
+    if (!user.balanceWithdrawn) user.balanceWithdrawn = 0; // Initialize if missing
+    user.balanceWithdrawn += withdrawal.netAmount; // Track approved withdrawals
+    user.withdrawableBalance -= withdrawal.netAmount; // Remove net amount from withdrawable
     await user.save();
+    
+    console.log(`Updated user ${user.email}: balanceWithdrawn +${withdrawal.netAmount}, withdrawableBalance -${withdrawal.netAmount}`);
 
-    // Set 48-hour waiting period for next cycle
+    // Set 1-minute waiting period for next cycle (testing)
     const investment = await Investment.findById(withdrawal.investmentId);
     const now = new Date();
     investment.withdrawalApprovedAt = now;
-    investment.nextCycleAvailableAt = new Date(now.getTime() + 48 * 60 * 60 * 1000); // 48 hours
+    investment.nextCycleAvailableAt = new Date(now.getTime() + 1 * 60 * 1000); // 1 minute
     await investment.save();
 
-    // Distribute referral rewards when admin approves withdrawal
+    // Distribute referral rewards when admin approves withdrawal (based on net amount)
     const { distributeReferralRewards } = require('../services/referralService');
-    await distributeReferralRewards(withdrawal.userId._id, withdrawal.amount);
+    await distributeReferralRewards(withdrawal.userId._id, withdrawal.netAmount);
 
     res.json({ message: 'Withdrawal approved successfully' });
   } catch (error) {

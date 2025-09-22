@@ -54,7 +54,7 @@ router.post('/start-earning', auth, async (req, res) => {
     // Check if this is a new cycle after withdrawal approval
     if (investment.withdrawalApprovedAt && investment.nextCycleAvailableAt) {
       if (new Date() < investment.nextCycleAvailableAt) {
-        return res.status(400).json({ error: 'Next cycle not available yet. Please wait 48 hours after withdrawal approval.' });
+        return res.status(400).json({ error: 'Next cycle not available yet. Please wait 1 minute after withdrawal approval.' });
       }
       // Reset for new cycle
       investment.earningStarted = false;
@@ -81,7 +81,7 @@ router.post('/start-earning', auth, async (req, res) => {
       });
     }
     
-    const endTime = new Date(now.getTime() + 8 * 60 * 60 * 1000); // 8 hours
+    const endTime = new Date(now.getTime() + 1 * 60 * 1000); // 1 minute
     
     investment.earningStarted = true;
     investment.earningCompleted = false;

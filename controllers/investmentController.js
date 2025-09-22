@@ -114,9 +114,11 @@ exports.completeCycle = async (req, res) => {
     }
 
     // Calculate earnings (daily rate for 8 hours = dailyRate/3)
-    const earningAmount = (investment.amount * investment.dailyRate) / 300; // 8 hours = 1/3 day
+    const grossEarning = (investment.amount * investment.dailyRate) / 300; // 8 hours = 1/3 day
+    const feeAmount = grossEarning * 0.15; // 15% fee
+    const netEarning = grossEarning - feeAmount; // Net amount after fee
     
-    investment.totalEarned += earningAmount;
+    investment.totalEarned += grossEarning; // Store gross for withdrawal calculation
     investment.cyclesCompleted += 1;
     investment.canWithdraw = true;
     investment.earningCompleted = true;
@@ -124,12 +126,20 @@ exports.completeCycle = async (req, res) => {
     investment.cycleEndTime = null;
     
     await investment.save();
+    
+    // Update user's balances
+    const user = await User.findById(req.user._id);
+    user.withdrawableBalance += netEarning; // Net amount user will actually receive
+    user.totalEarnings += netEarning; // Track total net earnings
+    await user.save();
+    
+    console.log(`Updated user ${user.email}: totalEarnings +${netEarning}, withdrawableBalance +${netEarning}`);
 
     // Note: Referral rewards will be distributed when admin approves withdrawal
 
     res.json({ 
       message: 'Earning cycle completed! You can now request withdrawal.',
-      earning: earningAmount,
+      earning: netEarning,
       totalEarned: investment.totalEarned
     });
   } catch (error) {

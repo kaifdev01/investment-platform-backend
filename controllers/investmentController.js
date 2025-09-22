@@ -93,6 +93,15 @@ exports.completeCycle = async (req, res) => {
     if (new Date() < investment.cycleEndTime) {
       return res.status(400).json({ error: 'Cycle not completed yet' });
     }
+    
+    // Block completing cycles on weekends
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      return res.status(400).json({ 
+        error: 'Earnings cannot be completed on weekends. Please wait until Monday.' 
+      });
+    }
 
     // Calculate earnings (daily rate for 8 hours = dailyRate/3)
     const earningAmount = (investment.amount * investment.dailyRate) / 300; // 8 hours = 1/3 day

@@ -49,6 +49,16 @@ exports.getInvestmentTiers = async (req, res) => {
 exports.createInvestment = async (req, res) => {
   try {
     const { amount } = req.body;
+    
+    // Block investments on weekends
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      return res.status(400).json({ 
+        error: 'Investments are only available Monday through Friday. Please try again on a weekday.' 
+      });
+    }
+    
     const tier = investmentTiers.find(t => t.amount === amount);
     
     if (!tier) {

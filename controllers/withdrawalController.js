@@ -121,11 +121,11 @@ exports.approveWithdrawal = async (req, res) => {
     
     console.log(`Updated user ${user.email}: balanceWithdrawn +${withdrawal.netAmount}, withdrawableBalance -${withdrawal.netAmount}`);
 
-    // Set 1-minute waiting period for next cycle (testing)
+    // Set 48-hour waiting period for next cycle
     const investment = await Investment.findById(withdrawal.investmentId);
     const now = new Date();
     investment.withdrawalApprovedAt = now;
-    investment.nextCycleAvailableAt = new Date(now.getTime() + 1 * 60 * 1000); // 1 minute
+    investment.nextCycleAvailableAt = new Date(now.getTime() + 48 * 60 * 60 * 1000); // 48 hours
     await investment.save();
 
     // Distribute referral rewards when admin approves withdrawal (based on net amount)

@@ -40,61 +40,8 @@ router.get('/referral-tree', auth, async (req, res) => {
 });
 router.get('/investment-tiers', auth, getInvestmentTiers);
 router.post('/invest', auth, createInvestment);
-router.post('/complete-cycle', auth, completeCycle);
-router.post('/start-earning', auth, async (req, res) => {
-  try {
-    const { investmentId } = req.body;
-    const Investment = require('../models/Investment');
-    
-    const investment = await Investment.findOne({ _id: investmentId, userId: req.user.id });
-    if (!investment) {
-      return res.status(404).json({ error: 'Investment not found' });
-    }
-    
-    // Check if this is a new cycle after withdrawal approval
-    if (investment.withdrawalApprovedAt && investment.nextCycleAvailableAt) {
-      if (new Date() < investment.nextCycleAvailableAt) {
-        return res.status(400).json({ error: 'Next cycle not available yet. Please wait 48 hours after withdrawal approval.' });
-      }
-      // Reset for new cycle
-      investment.earningStarted = false;
-      investment.earningCompleted = false;
-      investment.canWithdraw = false;
-      investment.withdrawalRequestedAt = null;
-      investment.withdrawalApprovedAt = null;
-      investment.nextCycleAvailableAt = null;
-      investment.totalEarned = 0;
-      investment.withdrawalPending = false;
-    }
-    
-    if (investment.earningStarted && !investment.earningCompleted) {
-      return res.status(400).json({ error: 'Earning cycle already started' });
-    }
-    
-    const now = new Date();
-    const dayOfWeek = now.getDay(); // 0 = Sunday, 6 = Saturday
-    
-    // Block earning cycles on weekends (Saturday = 6, Sunday = 0)
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
-      return res.status(400).json({ 
-        error: 'Earning cycles are not available on weekends. Please try again on Monday.' 
-      });
-    }
-    
-    const endTime = new Date(now.getTime() + 8 * 60 * 60 * 1000); // 8 hours
-    
-    investment.earningStarted = true;
-    investment.earningCompleted = false;
-    investment.cycleStartTime = now;
-    investment.cycleEndTime = endTime;
-    investment.withdrawalPending = false;
-    await investment.save();
-    
-    res.json({ message: 'Earning cycle started!', investment });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+router.post('/complete-cycle', auth, claimReward);
+router.post('/start-earning', auth, startCycle);
 router.get('/me', auth, getMe);
 router.put('/profile', auth, updateProfile);
 router.post('/simulate-deposit', auth, simulateDeposit);

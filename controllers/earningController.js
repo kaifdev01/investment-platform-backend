@@ -5,72 +5,70 @@ const User = require('../models/User');
 const isWeekday = (date) => {
   const day = date.getDay();
   const isActualWeekday = day >= 1 && day <= 5; // Monday = 1, Friday = 5
-  
+
   // For testing: Allow weekend earnings after 20 minutes
   if (!isActualWeekday) {
     const now = new Date();
     const twentyMinutesAgo = new Date(now.getTime() - 20 * 60 * 1000);
     return date >= twentyMinutesAgo;
   }
-  
+
   return isActualWeekday;
 };
 
 exports.startCycle = async (req, res) => {
   try {
     const { investmentId } = req.body;
-    
-    const investment = await Investment.findOne({ 
-      _id: investmentId, 
-      userId: req.user._id, 
-      status: 'Active' 
+
+    const investment = await Investment.findOne({
+      _id: investmentId,
+      userId: req.user._id
     });
-    
+
     if (!investment) {
       return res.status(404).json({ error: 'Investment not found' });
     }
-    
-    // Check if there's already an active cycle
-    if (investment.currentCycle) {
-      const activeCycle = await EarningCycle.findById(investment.currentCycle);
-      if (activeCycle && activeCycle.status === 'active') {
-        return res.status(400).json({ error: 'Cycle already active for this investment' });
+
+    // Check if this is a new cycle after withdrawal approval
+    if (investment.withdrawalApprovedAt && investment.nextCycleAvailableAt) {
+      if (new Date() < investment.nextCycleAvailableAt) {
+        return res.status(400).json({ error: 'Next cycle not available yet. Please wait 48 hours after withdrawal approval.' });
       }
+      // Reset for new cycle
+      investment.earningStarted = false;
+      investment.earningCompleted = false;
+      investment.canWithdraw = false;
+      investment.withdrawalRequestedAt = null;
+      investment.withdrawalApprovedAt = null;
+      investment.nextCycleAvailableAt = null;
+      investment.totalEarned = 0;
+      investment.withdrawalPending = false;
     }
-    
+
+    if (investment.earningStarted && !investment.earningCompleted) {
+      return res.status(400).json({ error: 'Earning cycle already started' });
+    }
+
     const now = new Date();
-    const endTime = new Date(now.getTime() + 5 * 60 * 1000); // 5 minutes later
-    const weekday = isWeekday(now);
-    
-    // Calculate cycle earning (daily rate / 3 for 8-hour cycle)
-    const cycleEarning = weekday ? (investment.amount * investment.dailyRate / 100) / 3 : 0;
-    
-    const cycle = new EarningCycle({
-      userId: req.user._id,
-      investmentId: investment._id,
-      startTime: now,
-      endTime: endTime,
-      amount: investment.amount,
-      dailyRate: investment.dailyRate,
-      cycleEarning: cycleEarning,
-      isWeekday: weekday
-    });
-    
-    await cycle.save();
-    
-    investment.currentCycle = cycle._id;
+    const dayOfWeek = now.getDay();
+
+    // Block earning cycles on weekends
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      return res.status(400).json({ 
+        error: 'Earning cycles are not available on weekends. Please try again on Monday.' 
+      });
+    }
+
+    const endTime = new Date(now.getTime() + 1 * 60 * 1000); // 1 minute for testing
+
+    investment.earningStarted = true;
+    investment.earningCompleted = false;
+    investment.cycleStartTime = now;
+    investment.cycleEndTime = endTime;
+    investment.withdrawalPending = false;
     await investment.save();
-    
-    res.json({
-      message: 'Earning cycle started successfully',
-      cycle: {
-        id: cycle._id,
-        startTime: cycle.startTime,
-        endTime: cycle.endTime,
-        earning: cycle.cycleEarning,
-        isWeekday: weekday
-      }
-    });
+
+    res.json({ message: 'Earning cycle started!', investment });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -78,43 +76,48 @@ exports.startCycle = async (req, res) => {
 
 exports.claimReward = async (req, res) => {
   try {
-    const { cycleId } = req.body;
-    
-    const cycle = await EarningCycle.findOne({
-      _id: cycleId,
+    const { investmentId } = req.body;
+
+    const investment = await Investment.findOne({
+      _id: investmentId,
       userId: req.user._id,
-      status: 'active'
+      earningStarted: true,
+      earningCompleted: false
     });
-    
-    if (!cycle) {
-      return res.status(404).json({ error: 'Active cycle not found' });
+
+    if (!investment) {
+      return res.status(404).json({ error: 'Active earning cycle not found' });
     }
-    
+
     const now = new Date();
-    if (now < cycle.endTime) {
+    if (now < investment.cycleEndTime) {
       return res.status(400).json({ error: 'Cycle not completed yet' });
     }
-    
-    // Update cycle status
-    cycle.status = 'completed';
-    await cycle.save();
-    
+
+    // Block completing cycles on weekends
+    const dayOfWeek = now.getDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      return res.status(400).json({ error: 'Earnings cannot be completed on weekends. Please wait until Monday.' });
+    }
+
+    // Calculate earning (daily rate / 3 for 8-hour cycle)
+    const cycleEarning = (investment.amount * investment.dailyRate / 100) / 3;
+
     // Update investment
-    const investment = await Investment.findById(cycle.investmentId);
-    investment.totalEarned += cycle.cycleEarning;
-    investment.cyclesCompleted += 1;
-    investment.currentCycle = null;
+    investment.totalEarned += cycleEarning;
+    investment.earningCompleted = true;
+    investment.canWithdraw = true;
     await investment.save();
-    
+
     // Update user balance
     const user = await User.findById(req.user._id);
-    user.totalEarnings += cycle.cycleEarning;
-    user.withdrawableBalance += cycle.cycleEarning;
+    user.totalEarnings = (user.totalEarnings || 0) + cycleEarning;
+    user.withdrawableBalance = (user.withdrawableBalance || 0) + cycleEarning;
     await user.save();
-    
+
     res.json({
-      message: 'Reward claimed successfully',
-      earning: cycle.cycleEarning,
+      message: 'Earning cycle completed successfully!',
+      earning: cycleEarning,
       newBalance: user.withdrawableBalance
     });
   } catch (error) {
@@ -124,12 +127,13 @@ exports.claimReward = async (req, res) => {
 
 exports.getActiveCycles = async (req, res) => {
   try {
-    const cycles = await EarningCycle.find({
+    const investments = await Investment.find({
       userId: req.user._id,
-      status: 'active'
-    }).populate('investmentId', 'tier amount');
-    
-    res.json({ cycles });
+      earningStarted: true,
+      earningCompleted: false
+    });
+
+    res.json({ cycles: investments });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

@@ -16,13 +16,8 @@ exports.requestWithdrawal = async (req, res) => {
       return res.status(400).json({ error: 'Withdrawal not available yet' });
     }
 
-    // Check if withdrawal already requested for current cycle
-    const existingWithdrawal = await Withdrawal.findOne({
-      investmentId,
-      status: 'pending' // Only check for pending withdrawals
-    });
-
-    if (existingWithdrawal) {
+    // Check if withdrawal already requested and investment is not ready for new withdrawal
+    if (investment.withdrawalRequestedAt && !investment.canWithdraw) {
       return res.status(400).json({ error: 'Withdrawal already requested for this cycle' });
     }
 
@@ -41,9 +36,12 @@ exports.requestWithdrawal = async (req, res) => {
 
     await withdrawal.save();
 
-    // Mark investment as withdrawal requested
+    // Mark investment as withdrawal requested and reset for new cycle
     investment.withdrawalRequestedAt = new Date();
+    investment.withdrawalTimer = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48h timer
     investment.canWithdraw = false;
+    investment.earningCompleted = false; // Reset for new cycle
+    investment.earningStarted = false; // Allow new cycle to start
     await investment.save();
 
     res.json({ message: 'Withdrawal requested successfully. Admin approval required.' });
@@ -121,11 +119,13 @@ exports.approveWithdrawal = async (req, res) => {
     
     console.log(`Updated user ${user.email}: balanceWithdrawn +${withdrawal.netAmount}, withdrawableBalance -${withdrawal.netAmount}`);
 
-    // Set 48-hour waiting period for next cycle
+    // Reset investment for new cycle immediately
     const investment = await Investment.findById(withdrawal.investmentId);
-    const now = new Date();
-    investment.withdrawalApprovedAt = now;
-    investment.nextCycleAvailableAt = new Date(now.getTime() + 48 * 60 * 60 * 1000); // 48 hours
+    investment.withdrawalApprovedAt = new Date();
+    investment.nextCycleAvailableAt = null;
+    investment.earningStarted = false;
+    investment.earningCompleted = false;
+    investment.totalEarned = 0;
     await investment.save();
 
     // Distribute referral rewards when admin approves withdrawal (based on net amount)

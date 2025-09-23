@@ -40,7 +40,19 @@ const investmentTiers = [
 
 exports.getInvestmentTiers = async (req, res) => {
   try {
-    res.json({ tiers: investmentTiers });
+    // Get user's existing investments to determine which tiers to disable
+    const existingInvestments = await Investment.find({ userId: req.user._id, status: 'Active' });
+    const highestExistingAmount = existingInvestments.length > 0 
+      ? Math.max(...existingInvestments.map(inv => inv.amount)) 
+      : 0;
+    
+    // Mark tiers as disabled if they are <= highest existing investment
+    const tiersWithStatus = investmentTiers.map(tier => ({
+      ...tier,
+      disabled: tier.amount <= highestExistingAmount
+    }));
+    
+    res.json({ tiers: tiersWithStatus });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -63,6 +75,17 @@ exports.createInvestment = async (req, res) => {
     
     if (!tier) {
       return res.status(400).json({ error: 'Invalid investment amount' });
+    }
+
+    // Check existing investments - only allow higher tier packages
+    const existingInvestments = await Investment.find({ userId: req.user._id, status: 'Active' });
+    if (existingInvestments.length > 0) {
+      const highestExistingAmount = Math.max(...existingInvestments.map(inv => inv.amount));
+      if (amount <= highestExistingAmount) {
+        return res.status(400).json({ 
+          error: 'You can only invest in higher tier packages. Please upgrade to a higher amount.' 
+        });
+      }
     }
 
     const user = await User.findById(req.user._id);
@@ -120,20 +143,18 @@ exports.completeCycle = async (req, res) => {
     
     investment.totalEarned += grossEarning; // Store gross for withdrawal calculation
     investment.cyclesCompleted += 1;
-    investment.canWithdraw = true;
-    investment.earningCompleted = true;
+    investment.canWithdraw = true; // Show withdrawal request option
+    investment.earningCompleted = true; // Mark as completed
+    investment.earningStarted = false; // Reset to allow new cycle
     investment.cycleStartTime = null;
     investment.cycleEndTime = null;
+    investment.withdrawalRequestedAt = null; // Clear any previous withdrawal request
     
     await investment.save();
     
-    // Update user's balances
-    const user = await User.findById(req.user._id);
-    user.withdrawableBalance += netEarning; // Net amount user will actually receive
-    user.totalEarnings += netEarning; // Track total net earnings
-    await user.save();
-    
-    console.log(`Updated user ${user.email}: totalEarnings +${netEarning}, withdrawableBalance +${netEarning}`);
+    // Don't update user balances here - only when admin approves withdrawal
+    console.log(`Cycle completed: grossEarning=${grossEarning}, netEarning=${netEarning}`);
+    console.log(`Investment after completion: canWithdraw=${investment.canWithdraw}, earningCompleted=${investment.earningCompleted}, totalEarned=${investment.totalEarned}`);
 
     // Note: Referral rewards will be distributed when admin approves withdrawal
 

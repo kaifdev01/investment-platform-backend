@@ -14,17 +14,21 @@ exports.getDashboard = async (req, res) => {
     
     const investments = await Investment.find({ userId: req.user._id, status: 'Active' });
     
-    // Calculate totals from investments (net amounts after 15% fee)
-    const grossEarnings = investments.reduce((sum, inv) => sum + (inv.totalEarned || 0), 0);
-    const netEarnings = grossEarnings * 0.85; // 15% fee deducted
-    const withdrawableBalance = netEarnings - (user.balanceWithdrawn || 0);
+    // Calculate current cycle earnings from investments
+    const currentCycleEarnings = investments.reduce((sum, inv) => sum + (inv.totalEarned || 0), 0);
+    const currentNetEarnings = currentCycleEarnings * 0.85;
+    
+    // Total earnings = user's stored total + current cycle earnings
+    const totalGrossEarnings = (user.totalEarnings || 0) + currentCycleEarnings;
+    const totalNetEarnings = totalGrossEarnings * 0.85;
+    const withdrawableBalance = currentNetEarnings; // Only current cycle is withdrawable
     
     res.json({
       accountSummary: {
         balance: user.balance,
         totalInvestment: user.totalInvestment,
-        totalEarnings: netEarnings, // Net earnings after fee
-        withdrawableBalance: Math.max(0, withdrawableBalance), // Net earnings minus withdrawn amount
+        totalEarnings: totalNetEarnings, // Cumulative net earnings
+        withdrawableBalance: Math.max(0, withdrawableBalance), // Current cycle net earnings
         balanceWithdrawn: user.balanceWithdrawn || 0, // Amount admin has approved
         referralRewards: user.referralRewards
       },

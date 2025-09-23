@@ -113,19 +113,23 @@ exports.approveWithdrawal = async (req, res) => {
     // Update user's balances when withdrawal is approved
     const user = await User.findById(withdrawal.userId._id || withdrawal.userId);
     if (!user.balanceWithdrawn) user.balanceWithdrawn = 0; // Initialize if missing
+    if (!user.totalEarnings) user.totalEarnings = 0; // Initialize if missing
+    
     user.balanceWithdrawn += withdrawal.netAmount; // Track approved withdrawals
-    user.withdrawableBalance -= withdrawal.netAmount; // Remove net amount from withdrawable
+    user.totalEarnings += withdrawal.amount; // Add gross earnings to user's total
     await user.save();
     
     console.log(`Updated user ${user.email}: balanceWithdrawn +${withdrawal.netAmount}, withdrawableBalance -${withdrawal.netAmount}`);
 
-    // Reset investment for new cycle immediately
+    // Reset investment for new cycle but keep totalEarned for dashboard
     const investment = await Investment.findById(withdrawal.investmentId);
     investment.withdrawalApprovedAt = new Date();
     investment.nextCycleAvailableAt = null;
     investment.earningStarted = false;
     investment.earningCompleted = false;
-    investment.totalEarned = 0;
+    investment.canWithdraw = false;
+    investment.withdrawalRequestedAt = null;
+    // Don't reset totalEarned - keep it for dashboard display
     await investment.save();
 
     // Distribute referral rewards when admin approves withdrawal (based on net amount)

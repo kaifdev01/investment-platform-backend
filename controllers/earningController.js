@@ -29,23 +29,21 @@ exports.startCycle = async (req, res) => {
       return res.status(404).json({ error: 'Investment not found' });
     }
 
-    // Check if this is a new cycle after withdrawal approval
-    if (investment.withdrawalApprovedAt && investment.nextCycleAvailableAt) {
-      if (new Date() < investment.nextCycleAvailableAt) {
-        return res.status(400).json({ error: 'Next cycle not available yet. Please wait 48 hours after withdrawal approval.' });
-      }
-      // Reset for new cycle
+    // Reset investment state if it was previously completed/withdrawn
+    if (investment.withdrawalApprovedAt || investment.earningCompleted) {
       investment.earningStarted = false;
       investment.earningCompleted = false;
       investment.canWithdraw = false;
       investment.withdrawalRequestedAt = null;
       investment.withdrawalApprovedAt = null;
       investment.nextCycleAvailableAt = null;
-      investment.totalEarned = 0;
-      investment.withdrawalPending = false;
+      investment.cycleStartTime = null;
+      investment.cycleEndTime = null;
+      // Don't reset totalEarned - it's cumulative for dashboard
     }
 
-    if (investment.earningStarted && !investment.earningCompleted) {
+    // Only block if currently in an active earning cycle
+    if (investment.earningStarted && !investment.earningCompleted && investment.cycleEndTime && new Date() < investment.cycleEndTime) {
       return res.status(400).json({ error: 'Earning cycle already started' });
     }
 

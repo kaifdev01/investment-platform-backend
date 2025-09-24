@@ -27,7 +27,7 @@ app.use('/api/cron', cronRoutes);
 app.use('/api/withdrawal', withdrawalRoutes);
 app.use('/api/test', testRoutes);
 
-app.get("/", (req, res) => {
+app.get("/hello", (req, res) => {
   res.send("Hello, World!");
 });
 

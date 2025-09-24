@@ -40,7 +40,7 @@ router.get('/referral-tree', auth, async (req, res) => {
 });
 router.get('/investment-tiers', auth, getInvestmentTiers);
 router.post('/invest', auth, createInvestment);
-router.post('/complete-cycle', auth, claimReward);
+router.post('/complete-cycle', auth, completeCycle);
 router.post('/start-earning', auth, startCycle);
 router.get('/me', auth, getMe);
 router.put('/profile', auth, updateProfile);

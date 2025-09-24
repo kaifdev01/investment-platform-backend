@@ -27,14 +27,18 @@ app.use('/api/cron', cronRoutes);
 app.use('/api/withdrawal', withdrawalRoutes);
 app.use('/api/test', testRoutes);
 
-app.get("/", (req, res) => {
+app.get("/test", (req, res) => {
   res.send("Hello, World!");
-});
+})
 
 
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
+
+
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log('Auto deposit processing available at /api/cron/process-deposits');
 });
+
+module.exports = app;

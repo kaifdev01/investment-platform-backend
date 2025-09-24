@@ -141,14 +141,24 @@ exports.completeCycle = async (req, res) => {
     const feeAmount = grossEarning * 0.15; // 15% fee
     const netEarning = grossEarning - feeAmount; // Net amount after fee
     
-    investment.totalEarned += grossEarning; // Store gross for withdrawal calculation
     investment.cyclesCompleted += 1;
+    
+    // Add this cycle's earnings to the array
+    if (!investment.cycleEarnings) investment.cycleEarnings = [];
+    investment.cycleEarnings.push({
+      cycleNumber: investment.cyclesCompleted,
+      grossAmount: grossEarning,
+      completedAt: new Date(),
+      withdrawalRequested: false
+    });
+    
+    investment.totalEarned = grossEarning; // Keep for backward compatibility
     investment.canWithdraw = true; // Show withdrawal request option
     investment.earningCompleted = true; // Mark as completed
     investment.earningStarted = false; // Reset to allow new cycle
     investment.cycleStartTime = null;
     investment.cycleEndTime = null;
-    investment.withdrawalRequestedAt = null; // Clear any previous withdrawal request
+    // Don't clear withdrawalRequestedAt - let previous withdrawals remain
     
     await investment.save();
     

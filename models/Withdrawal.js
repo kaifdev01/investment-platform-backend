@@ -29,6 +29,10 @@ const withdrawalSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  cycleNumber: {
+    type: Number,
+    required: true
+  },
   status: {
     type: String,
     enum: ['pending', 'approved', 'rejected', 'completed'],

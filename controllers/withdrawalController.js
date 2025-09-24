@@ -16,12 +16,15 @@ exports.requestWithdrawal = async (req, res) => {
       return res.status(400).json({ error: 'Withdrawal not available yet' });
     }
 
-    // Check if withdrawal already requested and investment is not ready for new withdrawal
-    if (investment.withdrawalRequestedAt && !investment.canWithdraw) {
-      return res.status(400).json({ error: 'Withdrawal already requested for this cycle' });
-    }
 
-    const originalAmount = investment.totalEarned;
+
+    // Find the latest cycle that hasn't been requested for withdrawal
+    const availableCycle = investment.cycleEarnings?.find(cycle => !cycle.withdrawalRequested);
+    if (!availableCycle) {
+      return res.status(400).json({ error: 'No available earnings to withdraw' });
+    }
+    
+    const originalAmount = availableCycle.grossAmount;
     const feeAmount = originalAmount * 0.15; // 15% fee
     const netAmount = originalAmount - feeAmount;
     
@@ -31,17 +34,16 @@ exports.requestWithdrawal = async (req, res) => {
       amount: originalAmount,
       feeAmount: feeAmount,
       netAmount: netAmount,
-      walletAddress
+      walletAddress,
+      cycleNumber: availableCycle.cycleNumber
     });
 
     await withdrawal.save();
 
-    // Mark investment as withdrawal requested and reset for new cycle
+    // Mark this specific cycle as having a withdrawal request
+    availableCycle.withdrawalRequested = true;
     investment.withdrawalRequestedAt = new Date();
     investment.withdrawalTimer = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48h timer
-    investment.canWithdraw = false;
-    investment.earningCompleted = false; // Reset for new cycle
-    investment.earningStarted = false; // Allow new cycle to start
     await investment.save();
 
     res.json({ message: 'Withdrawal requested successfully. Admin approval required.' });
@@ -102,7 +104,7 @@ exports.approveWithdrawal = async (req, res) => {
       return res.status(404).json({ error: 'Withdrawal not found' });
     }
 
-    withdrawal.status = 'approved';
+    withdrawal.status = 'completed'; // Mark as completed so new withdrawals can be requested
     withdrawal.processedAt = new Date();
     withdrawal.processedBy = req.user._id;
     withdrawal.txHash = txHash;
@@ -113,23 +115,29 @@ exports.approveWithdrawal = async (req, res) => {
     // Update user's balances when withdrawal is approved
     const user = await User.findById(withdrawal.userId._id || withdrawal.userId);
     if (!user.balanceWithdrawn) user.balanceWithdrawn = 0; // Initialize if missing
-    if (!user.totalEarnings) user.totalEarnings = 0; // Initialize if missing
     
     user.balanceWithdrawn += withdrawal.netAmount; // Track approved withdrawals
-    user.totalEarnings += withdrawal.amount; // Add gross earnings to user's total
+    // Don't add to totalEarnings - it should only show current available earnings
     await user.save();
     
     console.log(`Updated user ${user.email}: balanceWithdrawn +${withdrawal.netAmount}, withdrawableBalance -${withdrawal.netAmount}`);
 
-    // Reset investment for new cycle but keep totalEarned for dashboard
+    // Don't reset investment state - just mark the specific cycle as processed
     const investment = await Investment.findById(withdrawal.investmentId);
+    
+    // Find and mark the specific cycle as processed
+    if (investment.cycleEarnings && withdrawal.cycleNumber) {
+      const processedCycle = investment.cycleEarnings.find(cycle => 
+        cycle.cycleNumber === withdrawal.cycleNumber
+      );
+      if (processedCycle) {
+        processedCycle.withdrawalProcessed = true;
+        processedCycle.processedAt = new Date();
+      }
+    }
+    
     investment.withdrawalApprovedAt = new Date();
-    investment.nextCycleAvailableAt = null;
-    investment.earningStarted = false;
-    investment.earningCompleted = false;
-    investment.canWithdraw = false;
-    investment.withdrawalRequestedAt = null;
-    // Don't reset totalEarned - keep it for dashboard display
+    // Don't reset other fields - let cycles continue independently
     await investment.save();
 
     // Distribute referral rewards when admin approves withdrawal (based on net amount)
@@ -159,10 +167,18 @@ exports.rejectWithdrawal = async (req, res) => {
     
     await withdrawal.save();
 
-    // Allow user to request withdrawal again
+    // Mark the specific cycle as available for withdrawal again
     const investment = await Investment.findById(withdrawal.investmentId);
-    investment.canWithdraw = true;
-    investment.withdrawalRequestedAt = null;
+    
+    if (investment.cycleEarnings && withdrawal.cycleNumber) {
+      const rejectedCycle = investment.cycleEarnings.find(cycle => 
+        cycle.cycleNumber === withdrawal.cycleNumber
+      );
+      if (rejectedCycle) {
+        rejectedCycle.withdrawalRequested = false; // Allow withdrawal request again
+      }
+    }
+    
     await investment.save();
 
     res.json({ message: 'Withdrawal rejected' });

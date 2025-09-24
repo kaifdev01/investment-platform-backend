@@ -14,13 +14,19 @@ exports.getDashboard = async (req, res) => {
     
     const investments = await Investment.find({ userId: req.user._id, status: 'Active' });
     
-    // Calculate current cycle earnings from investments
-    const currentCycleEarnings = investments.reduce((sum, inv) => sum + (inv.totalEarned || 0), 0);
+    // Calculate current available earnings (not yet requested for withdrawal)
+    const currentCycleEarnings = investments
+      .filter(inv => inv.canWithdraw && !inv.withdrawalRequestedAt)
+      .reduce((sum, inv) => sum + (inv.totalEarned || 0), 0);
     const currentNetEarnings = currentCycleEarnings * 0.85;
     
-    // Total earnings = user's stored total + current cycle earnings
-    const totalGrossEarnings = (user.totalEarnings || 0) + currentCycleEarnings;
-    const totalNetEarnings = totalGrossEarnings * 0.85;
+    // Calculate total earnings that have been requested for withdrawal
+    const Withdrawal = require('../models/Withdrawal');
+    const withdrawalRequests = await Withdrawal.find({ userId: req.user._id });
+    const totalRequestedEarnings = withdrawalRequests.reduce((sum, w) => sum + (w.netAmount || w.amount * 0.85), 0);
+    
+    // Total earnings = requested withdrawals + current available earnings
+    const totalNetEarnings = totalRequestedEarnings + currentNetEarnings;
     const withdrawableBalance = currentNetEarnings; // Only current cycle is withdrawable
     
     res.json({

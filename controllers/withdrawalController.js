@@ -2,6 +2,83 @@ const Withdrawal = require('../models/Withdrawal');
 const Investment = require('../models/Investment');
 const User = require('../models/User');
 
+// Request withdrawal for all available earnings
+exports.requestWithdrawAll = async (req, res) => {
+  try {
+    const { walletAddress } = req.body;
+    
+    if (!walletAddress) {
+      return res.status(400).json({ error: 'Wallet address is required' });
+    }
+
+    // Save wallet address to user profile for future use
+    const user = await User.findById(req.user._id);
+    if (user.withdrawalWallet !== walletAddress) {
+      user.withdrawalWallet = walletAddress;
+      await user.save();
+    }
+
+    // Find all investments with available earnings
+    const investments = await Investment.find({ 
+      userId: req.user._id,
+      canWithdraw: true
+    });
+
+    if (investments.length === 0) {
+      return res.status(400).json({ error: 'No available earnings to withdraw' });
+    }
+
+    let totalGrossAmount = 0;
+    let withdrawalCount = 0;
+
+    // Process each investment with available cycles
+    for (const investment of investments) {
+      const availableCycles = investment.cycleEarnings?.filter(cycle => !cycle.withdrawalRequested) || [];
+      
+      for (const cycle of availableCycles) {
+        const originalAmount = cycle.grossAmount;
+        const feeAmount = originalAmount * 0.15; // 15% fee
+        const netAmount = originalAmount - feeAmount;
+        
+        const withdrawal = new Withdrawal({
+          userId: req.user._id,
+          investmentId: investment._id,
+          amount: originalAmount,
+          feeAmount: feeAmount,
+          netAmount: netAmount,
+          walletAddress,
+          cycleNumber: cycle.cycleNumber
+        });
+
+        await withdrawal.save();
+        
+        // Mark cycle as requested
+        cycle.withdrawalRequested = true;
+        totalGrossAmount += originalAmount;
+        withdrawalCount++;
+      }
+      
+      // Update investment
+      investment.withdrawalRequestedAt = new Date();
+      investment.withdrawalTimer = new Date(Date.now() + 48 * 60 * 60 * 1000);
+      await investment.save();
+    }
+
+    const totalFee = totalGrossAmount * 0.15;
+    const totalNet = totalGrossAmount - totalFee;
+
+    res.json({ 
+      message: `Withdrawal request submitted for all available earnings (${withdrawalCount} cycles). Admin approval required.`,
+      totalGross: totalGrossAmount,
+      totalFee: totalFee,
+      totalNet: totalNet,
+      withdrawalCount: withdrawalCount
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
 // Request withdrawal
 exports.requestWithdrawal = async (req, res) => {
   try {
@@ -14,6 +91,13 @@ exports.requestWithdrawal = async (req, res) => {
 
     if (!investment.canWithdraw) {
       return res.status(400).json({ error: 'Withdrawal not available yet' });
+    }
+
+    // Save wallet address to user profile for future use
+    const user = await User.findById(req.user._id);
+    if (user.withdrawalWallet !== walletAddress) {
+      user.withdrawalWallet = walletAddress;
+      await user.save();
     }
 
 

@@ -36,7 +36,8 @@ exports.getDashboard = async (req, res) => {
         totalEarnings: totalNetEarnings, // Cumulative net earnings
         withdrawableBalance: Math.max(0, withdrawableBalance), // Current cycle net earnings
         balanceWithdrawn: user.balanceWithdrawn || 0, // Amount admin has approved
-        referralRewards: user.referralRewards
+        referralRewards: user.referralRewards,
+        withdrawalWallet: user.withdrawalWallet
       },
       activeInvestments: investments
     });

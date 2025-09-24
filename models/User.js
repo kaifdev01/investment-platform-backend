@@ -17,6 +17,7 @@ const userSchema = new mongoose.Schema({
   withdrawableBalance: { type: Number, default: 0 },
   balanceWithdrawn: { type: Number, default: 0 },
   referralRewards: { type: Number, default: 0 },
+  withdrawalWallet: { type: String },
   referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   referralLevel1: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   referralLevel2: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],

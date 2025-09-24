@@ -9,6 +9,7 @@ const userRoutes = require('./routes/user');
 const cronRoutes = require('./routes/cron');
 const withdrawalRoutes = require('./routes/withdrawal');
 const testRoutes = require('./routes/test');
+const migrationRoutes = require('./routes/migration');
 
 const app = express();
 app.use(cors({
@@ -26,6 +27,7 @@ app.use('/api/user', userRoutes);
 app.use('/api/cron', cronRoutes);
 app.use('/api/withdrawal', withdrawalRoutes);
 app.use('/api/test', testRoutes);
+app.use('/api/migration', migrationRoutes);
 
 app.get("/test", (req, res) => {
   res.send("Hello, World!");

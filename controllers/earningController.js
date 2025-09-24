@@ -29,21 +29,21 @@ exports.startCycle = async (req, res) => {
       return res.status(404).json({ error: 'Investment not found' });
     }
 
-    // Reset investment state if it was previously completed/withdrawn
-    if (investment.withdrawalApprovedAt || investment.earningCompleted) {
+    // Reset investment state for new cycle
+    if (investment.withdrawalApprovedAt || (investment.earningCompleted && !investment.earningStarted)) {
       investment.earningStarted = false;
       investment.earningCompleted = false;
-      investment.canWithdraw = false;
+      // Don't reset canWithdraw - let it remain true if there are earnings
       investment.withdrawalRequestedAt = null;
       investment.withdrawalApprovedAt = null;
       investment.nextCycleAvailableAt = null;
       investment.cycleStartTime = null;
       investment.cycleEndTime = null;
-      // Don't reset totalEarned - it's cumulative for dashboard
+      // Don't reset totalEarned - keep existing earnings
     }
 
-    // Only block if currently in an active earning cycle
-    if (investment.earningStarted && !investment.earningCompleted && investment.cycleEndTime && new Date() < investment.cycleEndTime) {
+    // Only block if currently in an active earning cycle that hasn't ended and hasn't been withdrawn
+    if (investment.earningStarted && investment.cycleEndTime && new Date() < investment.cycleEndTime && !investment.earningCompleted && !investment.withdrawalApprovedAt) {
       return res.status(400).json({ error: 'Earning cycle already started' });
     }
 
@@ -57,13 +57,14 @@ exports.startCycle = async (req, res) => {
       });
     }
 
-    const endTime = new Date(now.getTime() + 1 * 60 * 1000); // 1 minute for testing
+    const endTime = new Date(now.getTime() + 10 * 1000); // 10 seconds for testing
 
     investment.earningStarted = true;
     investment.earningCompleted = false;
     investment.cycleStartTime = now;
     investment.cycleEndTime = endTime;
     investment.withdrawalPending = false;
+    // Don't modify canWithdraw when starting new cycle - let it remain as set by completeCycle
     await investment.save();
 
     res.json({ message: 'Earning cycle started!', investment });

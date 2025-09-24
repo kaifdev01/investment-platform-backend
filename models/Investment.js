@@ -9,6 +9,12 @@ const investmentSchema = new mongoose.Schema({
   status: { type: String, default: 'Active', enum: ['Active', 'Completed', 'Cancelled'] },
   currentCycle: { type: mongoose.Schema.Types.ObjectId, ref: 'EarningCycle' },
   totalEarned: { type: Number, default: 0 },
+  cycleEarnings: [{
+    cycleNumber: { type: Number, required: true },
+    grossAmount: { type: Number, required: true },
+    completedAt: { type: Date, default: Date.now },
+    withdrawalRequested: { type: Boolean, default: false }
+  }],
   cyclesCompleted: { type: Number, default: 0 },
   cycleStartTime: { type: Date },
   cycleEndTime: { type: Date },

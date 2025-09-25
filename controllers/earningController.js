@@ -59,6 +59,25 @@ exports.startCycle = async (req, res) => {
       });
     }
 
+    // Check if user already started any cycle for this tier today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const todayCycle = await Investment.findOne({
+      userId: req.user._id,
+      tier: investment.tier,
+      lastCycleDate: {
+        $gte: today,
+        $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000)
+      }
+    });
+    
+    if (todayCycle) {
+      return res.status(400).json({ 
+        error: `You can only start one earning cycle per day for ${investment.tier} tier. Please try again tomorrow.` 
+      });
+    }
+
     const endTime = new Date(now.getTime() + 8 * 60 * 60 * 1000); // 8 hours
 
     investment.earningStarted = true;
@@ -66,8 +85,16 @@ exports.startCycle = async (req, res) => {
     investment.cycleStartTime = now;
     investment.cycleEndTime = endTime;
     investment.withdrawalPending = false;
+    investment.lastCycleDate = now; // Track when last cycle was started
     // Don't modify canWithdraw when starting new cycle - let it remain as set by completeCycle
     await investment.save();
+    
+    console.log('Cycle started successfully. Investment updated:', {
+      id: investment._id,
+      tier: investment.tier,
+      lastCycleDate: investment.lastCycleDate,
+      cycleStartTime: investment.cycleStartTime
+    });
 
     res.json({ message: 'Earning cycle started!', investment });
   } catch (error) {

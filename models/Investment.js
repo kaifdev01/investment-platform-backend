@@ -23,7 +23,8 @@ const investmentSchema = new mongoose.Schema({
   earningStarted: { type: Boolean, default: false },
   earningCompleted: { type: Boolean, default: false },
   withdrawalApprovedAt: { type: Date },
-  nextCycleAvailableAt: { type: Date }
+  nextCycleAvailableAt: { type: Date },
+  lastCycleDate: { type: Date }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Investment', investmentSchema);

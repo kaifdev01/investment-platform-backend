@@ -4,7 +4,7 @@ const Invitation = require("../models/Invitation");
 const { sendVerificationCode, welcomeCode } = require("../config/email");
 
 const generateToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_SECRET || "secret");
+  return jwt.sign({ userId }, process.env.JWT_SECRET || "se@#Gg5a4s6B*&cr*(szYet");
 };
 
 function generateCode() {

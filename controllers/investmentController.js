@@ -136,8 +136,8 @@ exports.completeCycle = async (req, res) => {
       });
     }
 
-    // Calculate earnings (daily rate for 8 hours = dailyRate/3)
-    const grossEarning = (investment.amount * investment.dailyRate) / 300; // 8 hours = 1/3 day
+    // Calculate earnings (full daily rate percentage)
+    const grossEarning = (investment.amount * investment.dailyRate) / 100; // Full daily rate
     const feeAmount = grossEarning * 0.15; // 15% fee
     const netEarning = grossEarning - feeAmount; // Net amount after fee
     

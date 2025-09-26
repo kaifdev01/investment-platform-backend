@@ -158,3 +158,45 @@ exports.getAllDeposits = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+// Admin add balance to user account
+exports.addUserBalance = async (req, res) => {
+  try {
+    const { userId, amount, note } = req.body;
+    
+    if (!userId || !amount || amount <= 0) {
+      return res.status(400).json({ error: 'Valid user ID and positive amount required' });
+    }
+    
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Create admin deposit record
+    const deposit = new Deposit({
+      userId: user._id,
+      amount: parseFloat(amount),
+      toAddress: 'admin_credit',
+      status: 'confirmed',
+      type: 'admin_credit',
+      confirmations: 1,
+      processedAt: new Date(),
+      note: note || 'Admin balance addition'
+    });
+    
+    await deposit.save();
+    
+    // Update user balance
+    user.balance += parseFloat(amount);
+    await user.save();
+    
+    res.json({ 
+      message: `Successfully added $${amount} to ${user.firstName} ${user.lastName}'s account`,
+      newBalance: user.balance,
+      deposit: deposit
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};

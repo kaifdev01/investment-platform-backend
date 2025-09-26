@@ -8,8 +8,7 @@ module.exports = {
   POLYGON_RPC_URL: process.env.POLYGON_RPC_URL || 'https://polygon-mainnet.infura.io/v3/YOUR_INFURA_KEY',
 
   // Master wallet (platform's main wallet)
-  MASTER_WALLET_ADDRESS: process.env.MASTER_WALLET_ADDRESS || '0x857B7F4Cd911aB51e41D311cB437bBe33A229808',
-  MASTER_WALLET_PRIVATE_KEY: process.env.MASTER_WALLET_PRIVATE_KEY || "0eabd606dbfc14b818985099cc2339f5d5dbebfc668bf18fbb778a9af5ca1cb7",
+  MASTER_WALLET_ADDRESS: process.env.MASTER_WALLET_ADDRESS || '0x517A5645c16F59744E724fA4432c8f2bC85cAb1d',
 
   // USDC Contract Addresses
   USDC_CONTRACT_ETHEREUM: '0xA0b86a33E6441b8e5c7F8b8b8b8b8b8b8b8b8b8b',

@@ -22,9 +22,11 @@ const fixBalanceWithdrawn = async () => {
     
     console.log(`✅ Fixed ${result2.modifiedCount} users with null/undefined balanceWithdrawn`);
     
+    await mongoose.connection.close();
     process.exit(0);
   } catch (error) {
     console.error('Error:', error);
+    await mongoose.connection.close();
     process.exit(1);
   }
 };

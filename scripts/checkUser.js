@@ -30,9 +30,11 @@ const checkUser = async () => {
       });
     }
     
+    await mongoose.connection.close();
     process.exit(0);
   } catch (error) {
     console.error('❌ Error:', error.message);
+    await mongoose.connection.close();
     process.exit(1);
   }
 };

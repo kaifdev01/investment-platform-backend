@@ -23,9 +23,11 @@ async function createTestAdmin() {
     console.log('Email: admin@test.com');
     console.log('Password: password123');
     
+    await mongoose.connection.close();
     process.exit(0);
   } catch (error) {
     console.error('Error:', error);
+    await mongoose.connection.close();
     process.exit(1);
   }
 }

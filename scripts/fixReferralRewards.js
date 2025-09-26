@@ -22,9 +22,11 @@ const fixReferralRewards = async () => {
     
     console.log(`✅ Fixed ${result2.modifiedCount} users with null/undefined referralRewards`);
     
+    await mongoose.connection.close();
     process.exit(0);
   } catch (error) {
     console.error('Error:', error);
+    await mongoose.connection.close();
     process.exit(1);
   }
 };

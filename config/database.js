@@ -4,7 +4,12 @@ const connectDB = async () => {
   try {
     const conn = await mongoose.connect('mongodb+srv://admin:admin@cluster0.aewgwmo.mongodb.net/test?retryWrites=true&w=majority', {
       useNewUrlParser: true,
-      useUnifiedTopology: true
+      useUnifiedTopology: true,
+      maxPoolSize: 10, // Limit connection pool
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      bufferCommands: false,
+      bufferMaxEntries: 0
     });
     console.log(`MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {

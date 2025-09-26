@@ -15,9 +15,11 @@ const updateDepositAddresses = async () => {
     );
     
     console.log(`Updated ${result.modifiedCount} users with master wallet address: ${masterWallet}`);
+    await mongoose.connection.close();
     process.exit(0);
   } catch (error) {
     console.error('Error updating deposit addresses:', error);
+    await mongoose.connection.close();
     process.exit(1);
   }
 };

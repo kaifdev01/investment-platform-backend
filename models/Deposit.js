@@ -5,9 +5,9 @@ const depositSchema = new mongoose.Schema({
   amount: { type: Number, required: true },
   txHash: { type: String },
   fromAddress: { type: String },
-  toAddress: { type: String, required: true },
+  toAddress: { type: String },
   status: { type: String, enum: ['pending', 'confirmed', 'failed'], default: 'pending' },
-  type: { type: String, enum: ['demo', 'real'], default: 'real' },
+  type: { type: String, enum: ['demo', 'real', 'admin_credit'], default: 'real' },
   confirmations: { type: Number, default: 0 },
   blockNumber: { type: Number },
   processedAt: { type: Date }

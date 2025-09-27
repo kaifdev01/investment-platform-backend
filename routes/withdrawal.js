@@ -51,6 +51,7 @@ const getFailedDeposits = async (req, res) => {
 
 // User routes
 router.post('/request', auth, withdrawalController.requestWithdrawal);
+router.post('/request-all', auth, withdrawalController.requestWithdrawAll);
 router.get('/my-withdrawals', auth, withdrawalController.getUserWithdrawals);
 router.post('/update-failed-deposit', auth, updateFailedDeposit);
 router.get('/failed-deposits', auth, getFailedDeposits);

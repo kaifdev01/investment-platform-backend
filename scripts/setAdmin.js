@@ -27,9 +27,11 @@ const setAdminStatus = async () => {
     await user.save();
 
     console.log(`✅ Admin status set for ${user.email}`);
+    await mongoose.connection.close();
     process.exit(0);
   } catch (error) {
     console.error('Error:', error);
+    await mongoose.connection.close();
     process.exit(1);
   }
 };

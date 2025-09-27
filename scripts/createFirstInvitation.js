@@ -13,9 +13,11 @@ const createFirstInvitation = async () => {
 
     await invitation.save();
     console.log('First invitation code created: ADMIN2025');
+    await mongoose.connection.close();
     process.exit(0);
   } catch (error) {
     console.error('Error:', error);
+    await mongoose.connection.close();
     process.exit(1);
   }
 };

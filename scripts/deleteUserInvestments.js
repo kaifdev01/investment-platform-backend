@@ -39,7 +39,8 @@ const deleteUserInvestments = async () => {
   } catch (error) {
     console.error('Error:', error);
   } finally {
-    mongoose.disconnect();
+    await mongoose.connection.close();
+    process.exit(0);
   }
 };
 

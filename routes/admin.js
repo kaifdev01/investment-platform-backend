@@ -13,5 +13,6 @@ router.get('/deposits', auth, adminAuth, adminController.getAllDeposits);
 router.post('/process-deposit', auth, adminAuth, adminController.processDeposit);
 router.get('/pending-deposits', auth, adminAuth, adminController.getPendingDeposits);
 router.post('/add-user-balance', auth, adminAuth, adminController.addUserBalance);
+router.post('/update-user-balance', auth, adminAuth, adminController.updateUserBalance);
 
 module.exports = router;

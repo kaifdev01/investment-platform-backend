@@ -8,7 +8,7 @@ const deleteUserInvestments = async () => {
   try {
     await mongoose.connect(process.env.MONGODB_URI);
 
-    const userEmail = 'kaifm9096@gmail.com';
+    const userEmail = 'adeelimran467@gmail.com';
 
     // Find user
     const user = await User.findOne({ email: userEmail });

@@ -79,6 +79,8 @@ exports.createInvestment = async (req, res) => {
 
     // Check existing investments - only allow higher tier packages
     const existingInvestments = await Investment.find({ userId: req.user._id, status: 'Active' });
+    let upgradeAmount = tier.amount;
+    
     if (existingInvestments.length > 0) {
       const highestExistingAmount = Math.max(...existingInvestments.map(inv => inv.amount));
       if (amount <= highestExistingAmount) {
@@ -86,11 +88,13 @@ exports.createInvestment = async (req, res) => {
           error: 'You can only invest in higher tier packages. Please upgrade to a higher amount.' 
         });
       }
+      // Calculate upgrade amount (only pay the difference)
+      upgradeAmount = tier.amount - highestExistingAmount;
     }
 
     const user = await User.findById(req.user._id);
-    if (user.balance < tier.amount) {
-      return res.status(400).json({ error: 'Insufficient balance' });
+    if (user.balance < upgradeAmount) {
+      return res.status(400).json({ error: `Insufficient balance. You need $${upgradeAmount} to upgrade.` });
     }
 
     const investment = new Investment({
@@ -103,9 +107,11 @@ exports.createInvestment = async (req, res) => {
     await investment.save();
 
     // Update user's balance and total investment
-    user.balance -= tier.amount;
-    user.totalInvestment += tier.amount;
+    user.balance -= upgradeAmount;
+    user.totalInvestment += upgradeAmount;
     await user.save();
+    
+    console.log(`Investment upgrade: Tier ${tier.tier}, Full amount: $${tier.amount}, Paid: $${upgradeAmount}`);
 
     res.json({ message: 'Investment created successfully', investment });
   } catch (error) {

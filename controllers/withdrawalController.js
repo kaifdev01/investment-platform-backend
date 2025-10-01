@@ -24,11 +24,16 @@ exports.requestWithdrawAll = async (req, res) => {
       canWithdraw: true
     });
 
-    if (investments.length === 0) {
-      return res.status(400).json({ error: 'No available earnings to withdraw' });
+    // Include USDC balance and referral rewards
+    const userBalance = user.balance || 0;
+    const referralRewards = user.referralRewards || 0;
+    const additionalAmount = userBalance + referralRewards;
+
+    if (investments.length === 0 && additionalAmount === 0) {
+      return res.status(400).json({ error: 'No available funds to withdraw' });
     }
 
-    let totalGrossAmount = 0;
+    let totalGrossAmount = additionalAmount; // Start with balance + referrals
     let withdrawalCount = 0;
 
     // Process each investment with available cycles
@@ -64,15 +69,16 @@ exports.requestWithdrawAll = async (req, res) => {
       await investment.save();
     }
 
-    const totalFee = totalGrossAmount * 0.15;
+    const totalFee = (totalGrossAmount - additionalAmount) * 0.15; // Only fee on earnings
     const totalNet = totalGrossAmount - totalFee;
 
     res.json({ 
-      message: `Withdrawal request submitted for all available earnings (${withdrawalCount} cycles). Admin approval required.`,
+      message: `Withdrawal request submitted for all available funds (${withdrawalCount} cycles${additionalAmount > 0 ? ' + balance/rewards' : ''}). Admin approval required.`,
       totalGross: totalGrossAmount,
       totalFee: totalFee,
       totalNet: totalNet,
-      withdrawalCount: withdrawalCount
+      withdrawalCount: withdrawalCount,
+      balanceAmount: additionalAmount
     });
   } catch (error) {
     res.status(400).json({ error: error.message });

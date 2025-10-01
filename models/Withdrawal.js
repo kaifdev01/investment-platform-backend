@@ -9,7 +9,7 @@ const withdrawalSchema = new mongoose.Schema({
   investmentId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Investment',
-    required: true
+    required: false
   },
   amount: {
     type: Number,
@@ -31,7 +31,20 @@ const withdrawalSchema = new mongoose.Schema({
   },
   cycleNumber: {
     type: Number,
-    required: true
+    required: false
+  },
+  type: {
+    type: String,
+    enum: ['earnings', 'balance_and_rewards'],
+    default: 'earnings'
+  },
+  originalBalance: {
+    type: Number,
+    default: 0
+  },
+  originalReferralRewards: {
+    type: Number,
+    default: 0
   },
   status: {
     type: String,

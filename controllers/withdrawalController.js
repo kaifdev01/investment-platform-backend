@@ -36,6 +36,30 @@ exports.requestWithdrawAll = async (req, res) => {
     let totalGrossAmount = additionalAmount; // Start with balance + referrals
     let withdrawalCount = 0;
 
+    // Create withdrawal record for USDC balance and referral rewards if they exist
+    if (additionalAmount > 0) {
+      const balanceWithdrawal = new Withdrawal({
+        userId: req.user._id,
+        investmentId: null, // No specific investment for balance/rewards
+        amount: additionalAmount,
+        feeAmount: 0, // No fee on balance and referral rewards
+        netAmount: additionalAmount,
+        walletAddress,
+        cycleNumber: null,
+        type: 'balance_and_rewards', // Identify this as balance withdrawal
+        originalBalance: userBalance,
+        originalReferralRewards: referralRewards
+      });
+
+      await balanceWithdrawal.save();
+      withdrawalCount++;
+      
+      // Reset balance and referral rewards immediately when request is submitted
+      user.balance = 0;
+      user.referralRewards = 0;
+      await user.save();
+    }
+
     // Process each investment with available cycles
     for (const investment of investments) {
       const availableCycles = investment.cycleEarnings?.filter(cycle => !cycle.withdrawalRequested) || [];
@@ -52,7 +76,8 @@ exports.requestWithdrawAll = async (req, res) => {
           feeAmount: feeAmount,
           netAmount: netAmount,
           walletAddress,
-          cycleNumber: cycle.cycleNumber
+          cycleNumber: cycle.cycleNumber,
+          type: 'earnings'
         });
 
         await withdrawal.save();
@@ -125,7 +150,8 @@ exports.requestWithdrawal = async (req, res) => {
       feeAmount: feeAmount,
       netAmount: netAmount,
       walletAddress,
-      cycleNumber: availableCycle.cycleNumber
+      cycleNumber: availableCycle.cycleNumber,
+      type: 'earnings'
     });
 
     await withdrawal.save();
@@ -163,7 +189,22 @@ exports.getPendingWithdrawals = async (req, res) => {
       .populate('investmentId')
       .sort({ requestedAt: -1 });
     
-    res.json({ withdrawals });
+    // Enhance withdrawal data with detailed information
+    const enhancedWithdrawals = withdrawals.map(withdrawal => {
+      const withdrawalObj = withdrawal.toObject();
+      
+      if (withdrawal.type === 'balance_and_rewards') {
+        withdrawalObj.description = `Balance Withdrawal Request - USDC Balance: $${withdrawal.originalBalance || 0} + Referral Rewards: $${withdrawal.originalReferralRewards || 0}`;
+        withdrawalObj.displayType = 'Balance Withdrawal Request';
+      } else {
+        withdrawalObj.description = `Cycle ${withdrawal.cycleNumber} earnings (15% fee applied)`;
+        withdrawalObj.displayType = `Investment Cycle ${withdrawal.cycleNumber}`;
+      }
+      
+      return withdrawalObj;
+    });
+    
+    res.json({ withdrawals: enhancedWithdrawals });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -207,28 +248,33 @@ exports.approveWithdrawal = async (req, res) => {
     if (!user.balanceWithdrawn) user.balanceWithdrawn = 0; // Initialize if missing
     
     user.balanceWithdrawn += withdrawal.netAmount; // Track approved withdrawals
-    // Don't add to totalEarnings - it should only show current available earnings
+    
+    // Balance and referral rewards are already reset when withdrawal was requested
+    
     await user.save();
     
     console.log(`Updated user ${user.email}: balanceWithdrawn +${withdrawal.netAmount}, withdrawableBalance -${withdrawal.netAmount}`);
 
-    // Don't reset investment state - just mark the specific cycle as processed
-    const investment = await Investment.findById(withdrawal.investmentId);
-    
-    // Find and mark the specific cycle as processed
-    if (investment.cycleEarnings && withdrawal.cycleNumber) {
-      const processedCycle = investment.cycleEarnings.find(cycle => 
-        cycle.cycleNumber === withdrawal.cycleNumber
-      );
-      if (processedCycle) {
-        processedCycle.withdrawalProcessed = true;
-        processedCycle.processedAt = new Date();
+    // Only process investment updates for earnings withdrawals
+    if (withdrawal.type === 'earnings' && withdrawal.investmentId) {
+      const investment = await Investment.findById(withdrawal.investmentId);
+      
+      // Find and mark the specific cycle as processed
+      if (investment && investment.cycleEarnings && withdrawal.cycleNumber) {
+        const processedCycle = investment.cycleEarnings.find(cycle => 
+          cycle.cycleNumber === withdrawal.cycleNumber
+        );
+        if (processedCycle) {
+          processedCycle.withdrawalProcessed = true;
+          processedCycle.processedAt = new Date();
+        }
+      }
+      
+      if (investment) {
+        investment.withdrawalApprovedAt = new Date();
+        await investment.save();
       }
     }
-    
-    investment.withdrawalApprovedAt = new Date();
-    // Don't reset other fields - let cycles continue independently
-    await investment.save();
 
     // Distribute referral rewards when admin approves withdrawal (based on net amount)
     const { distributeReferralRewards } = require('../services/referralService');
@@ -256,20 +302,32 @@ exports.rejectWithdrawal = async (req, res) => {
     withdrawal.notes = notes;
     
     await withdrawal.save();
-
-    // Mark the specific cycle as available for withdrawal again
-    const investment = await Investment.findById(withdrawal.investmentId);
     
-    if (investment.cycleEarnings && withdrawal.cycleNumber) {
-      const rejectedCycle = investment.cycleEarnings.find(cycle => 
-        cycle.cycleNumber === withdrawal.cycleNumber
-      );
-      if (rejectedCycle) {
-        rejectedCycle.withdrawalRequested = false; // Allow withdrawal request again
+    // If balance_and_rewards withdrawal is rejected, restore the balance
+    if (withdrawal.type === 'balance_and_rewards') {
+      const user = await User.findById(withdrawal.userId);
+      user.balance = (user.balance || 0) + (withdrawal.originalBalance || 0);
+      user.referralRewards = (user.referralRewards || 0) + (withdrawal.originalReferralRewards || 0);
+      await user.save();
+    }
+
+    // Only process investment updates for earnings withdrawals
+    if (withdrawal.type === 'earnings' && withdrawal.investmentId) {
+      const investment = await Investment.findById(withdrawal.investmentId);
+      
+      if (investment && investment.cycleEarnings && withdrawal.cycleNumber) {
+        const rejectedCycle = investment.cycleEarnings.find(cycle => 
+          cycle.cycleNumber === withdrawal.cycleNumber
+        );
+        if (rejectedCycle) {
+          rejectedCycle.withdrawalRequested = false; // Allow withdrawal request again
+        }
+      }
+      
+      if (investment) {
+        await investment.save();
       }
     }
-    
-    await investment.save();
 
     res.json({ message: 'Withdrawal rejected' });
   } catch (error) {

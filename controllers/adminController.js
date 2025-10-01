@@ -200,3 +200,50 @@ exports.addUserBalance = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+// Admin update user balance (set exact amount)
+exports.updateUserBalance = async (req, res) => {
+  try {
+    const { userId, newBalance, note } = req.body;
+    
+    if (!userId || newBalance < 0) {
+      return res.status(400).json({ error: 'Valid user ID and non-negative balance required' });
+    }
+    
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const oldBalance = user.balance;
+    const difference = parseFloat(newBalance) - oldBalance;
+    
+    // Create admin record for the balance change
+    const deposit = new Deposit({
+      userId: user._id,
+      amount: Math.abs(difference),
+      toAddress: 'admin_update',
+      status: 'confirmed',
+      type: 'admin_credit',
+      confirmations: 1,
+      processedAt: new Date(),
+      note: note || `Admin balance ${difference >= 0 ? 'increase' : 'decrease'}: ${oldBalance.toFixed(2)} → ${parseFloat(newBalance).toFixed(2)}`
+    });
+    
+    await deposit.save();
+    
+    // Update user balance to exact amount
+    user.balance = parseFloat(newBalance);
+    await user.save();
+    
+    res.json({ 
+      message: `Successfully updated ${user.firstName} ${user.lastName}'s balance from $${oldBalance.toFixed(2)} to $${newBalance}`,
+      oldBalance: oldBalance,
+      newBalance: user.balance,
+      difference: difference,
+      deposit: deposit
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};

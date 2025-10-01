@@ -49,8 +49,8 @@ const getFailedDeposits = async (req, res) => {
   }
 };
 
-// User routes
-router.post('/request', auth, withdrawalController.requestWithdrawal);
+// User routes - Single withdrawals disabled, only allow withdraw all
+// router.post('/request', auth, withdrawalController.requestWithdrawal); // DISABLED
 router.post('/request-all', auth, withdrawalController.requestWithdrawAll);
 router.get('/my-withdrawals', auth, withdrawalController.getUserWithdrawals);
 router.post('/update-failed-deposit', auth, updateFailedDeposit);

@@ -59,6 +59,23 @@ exports.startCycle = async (req, res) => {
       });
     }
 
+    // Get user's highest tier investment
+    const userInvestments = await Investment.find({
+      userId: req.user._id,
+      status: 'Active'
+    });
+    
+    const highestTierInvestment = userInvestments.reduce((highest, current) => {
+      return current.amount > highest.amount ? current : highest;
+    }, userInvestments[0]);
+    
+    // Only allow earning from the highest tier
+    if (investment.amount < highestTierInvestment.amount) {
+      return res.status(400).json({ 
+        error: `You can only earn from your highest tier (${highestTierInvestment.tier}). Lower tier earnings are disabled.` 
+      });
+    }
+    
     // Check if user already started any cycle for this tier today
     const today = new Date();
     today.setHours(0, 0, 0, 0);

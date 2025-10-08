@@ -5,10 +5,18 @@ const User = require('../models/User');
 // Request withdrawal for all available earnings
 exports.requestWithdrawAll = async (req, res) => {
   try {
-    const { walletAddress } = req.body;
+    const { walletAddress, withdrawalPassword, amount } = req.body;
     
     if (!walletAddress) {
       return res.status(400).json({ error: 'Wallet address is required' });
+    }
+
+    if (!withdrawalPassword) {
+      return res.status(400).json({ error: 'Withdrawal password is required' });
+    }
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: 'Valid withdrawal amount is required' });
     }
 
     // Save wallet address to user profile for future use
@@ -16,6 +24,12 @@ exports.requestWithdrawAll = async (req, res) => {
     if (user.withdrawalWallet !== walletAddress) {
       user.withdrawalWallet = walletAddress;
       await user.save();
+    }
+
+    // Verify withdrawal password
+    const isPasswordValid = await user.compareWithdrawalPassword(withdrawalPassword);
+    if (!isPasswordValid) {
+      return res.status(400).json({ error: 'Invalid withdrawal password' });
     }
 
     // Find all investments with available earnings
@@ -29,81 +43,108 @@ exports.requestWithdrawAll = async (req, res) => {
     const referralRewards = user.referralRewards || 0;
     const additionalAmount = userBalance + referralRewards;
 
-    if (investments.length === 0 && additionalAmount === 0) {
+    // Calculate total available earnings
+    const availableEarnings = investments.reduce((total, investment) => {
+      const availableCycles = investment.cycleEarnings?.filter(cycle => !cycle.withdrawalRequested) || [];
+      return total + availableCycles.reduce((sum, cycle) => sum + (cycle.grossAmount * 0.85), 0); // Net after 15% fee
+    }, 0);
+
+    const totalAvailable = additionalAmount + availableEarnings;
+
+    if (totalAvailable === 0) {
       return res.status(400).json({ error: 'No available funds to withdraw' });
     }
 
-    let totalGrossAmount = additionalAmount; // Start with balance + referrals
-    let withdrawalCount = 0;
+    if (amount > totalAvailable) {
+      return res.status(400).json({ 
+        error: `Insufficient funds. Available: $${totalAvailable.toFixed(2)}, Requested: $${amount.toFixed(2)}` 
+      });
+    }
 
-    // Create withdrawal record for USDC balance and referral rewards if they exist
-    if (additionalAmount > 0) {
+    let remainingAmount = amount;
+    let withdrawalCount = 0;
+    let totalProcessed = 0;
+
+    // First, use balance and referral rewards if available and needed
+    if (additionalAmount > 0 && remainingAmount > 0) {
+      const balanceToUse = Math.min(additionalAmount, remainingAmount);
+      
       const balanceWithdrawal = new Withdrawal({
         userId: req.user._id,
-        investmentId: null, // No specific investment for balance/rewards
-        amount: additionalAmount,
-        feeAmount: 0, // No fee on balance and referral rewards
-        netAmount: additionalAmount,
+        investmentId: null,
+        amount: balanceToUse,
+        feeAmount: 0,
+        netAmount: balanceToUse,
         walletAddress,
         cycleNumber: null,
-        type: 'balance_and_rewards', // Identify this as balance withdrawal
-        originalBalance: userBalance,
-        originalReferralRewards: referralRewards
+        type: 'balance_and_rewards',
+        originalBalance: Math.min(userBalance, balanceToUse),
+        originalReferralRewards: Math.min(referralRewards, balanceToUse - Math.min(userBalance, balanceToUse))
       });
 
       await balanceWithdrawal.save();
       withdrawalCount++;
+      totalProcessed += balanceToUse;
+      remainingAmount -= balanceToUse;
       
-      // Reset balance and referral rewards immediately when request is submitted
-      user.balance = 0;
-      user.referralRewards = 0;
+      // Deduct from user balance and referral rewards proportionally
+      const balanceUsed = Math.min(userBalance, balanceToUse);
+      const rewardsUsed = balanceToUse - balanceUsed;
+      user.balance -= balanceUsed;
+      user.referralRewards -= rewardsUsed;
       await user.save();
     }
 
-    // Process each investment with available cycles
-    for (const investment of investments) {
-      const availableCycles = investment.cycleEarnings?.filter(cycle => !cycle.withdrawalRequested) || [];
-      
-      for (const cycle of availableCycles) {
-        const originalAmount = cycle.grossAmount;
-        const feeAmount = originalAmount * 0.15; // 15% fee
-        const netAmount = originalAmount - feeAmount;
+    // Then process earnings if more amount is needed
+    if (remainingAmount > 0) {
+      for (const investment of investments) {
+        if (remainingAmount <= 0) break;
         
-        const withdrawal = new Withdrawal({
-          userId: req.user._id,
-          investmentId: investment._id,
-          amount: originalAmount,
-          feeAmount: feeAmount,
-          netAmount: netAmount,
-          walletAddress,
-          cycleNumber: cycle.cycleNumber,
-          type: 'earnings'
-        });
+        const availableCycles = investment.cycleEarnings?.filter(cycle => !cycle.withdrawalRequested) || [];
+        
+        for (const cycle of availableCycles) {
+          if (remainingAmount <= 0) break;
+          
+          const cycleNetAmount = cycle.grossAmount * 0.85; // Net after 15% fee
+          const amountToWithdraw = Math.min(cycleNetAmount, remainingAmount);
+          
+          // Calculate gross amount needed to get the desired net amount
+          const grossNeeded = amountToWithdraw / 0.85;
+          const feeAmount = grossNeeded * 0.15;
+          
+          const withdrawal = new Withdrawal({
+            userId: req.user._id,
+            investmentId: investment._id,
+            amount: grossNeeded,
+            feeAmount: feeAmount,
+            netAmount: amountToWithdraw,
+            walletAddress,
+            cycleNumber: cycle.cycleNumber,
+            type: 'earnings'
+          });
 
-        await withdrawal.save();
+          await withdrawal.save();
+          cycle.withdrawalRequested = true;
+          withdrawalCount++;
+          totalProcessed += amountToWithdraw;
+          remainingAmount -= amountToWithdraw;
+        }
         
-        // Mark cycle as requested
-        cycle.withdrawalRequested = true;
-        totalGrossAmount += originalAmount;
-        withdrawalCount++;
+        // Update investment if any cycles were processed
+        const processedCycles = investment.cycleEarnings?.filter(cycle => cycle.withdrawalRequested) || [];
+        if (processedCycles.length > 0) {
+          investment.withdrawalRequestedAt = new Date();
+          investment.withdrawalTimer = new Date(Date.now() + 48 * 60 * 60 * 1000);
+          await investment.save();
+        }
       }
-      
-      // Update investment
-      investment.withdrawalRequestedAt = new Date();
-      investment.withdrawalTimer = new Date(Date.now() + 48 * 60 * 60 * 1000);
-      await investment.save();
     }
 
-    const totalFee = (totalGrossAmount - additionalAmount) * 0.15; // Only fee on earnings
-    const totalNet = totalGrossAmount - totalFee;
-
     res.json({ 
-      message: `Withdrawal request submitted for all available funds (${withdrawalCount} cycles${additionalAmount > 0 ? ' + balance/rewards' : ''}). Admin approval required.`,
-      totalGross: totalGrossAmount,
-      totalFee: totalFee,
-      totalNet: totalNet,
+      message: `Withdrawal request submitted for $${totalProcessed.toFixed(2)} (${withdrawalCount} withdrawal records). Admin approval required.`,
+      totalProcessed: totalProcessed,
       withdrawalCount: withdrawalCount,
-      balanceAmount: additionalAmount
+      requestedAmount: amount
     });
   } catch (error) {
     res.status(400).json({ error: error.message });

@@ -7,8 +7,8 @@ const resetPassword = async () => {
   try {
     await mongoose.connect(process.env.MONGODB_URI);
 
-    const email = 'kaifm9096@gmail.com';
-    const newPassword = 'qwerty1122@'; // Change this to your desired password
+    const email = 'adeelimran467@gmail.com';
+    const newPassword = 'adeel1122'; // Change this to your desired password
 
     const user = await User.findOne({ email });
 

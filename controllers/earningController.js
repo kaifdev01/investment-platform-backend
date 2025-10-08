@@ -95,7 +95,7 @@ exports.startCycle = async (req, res) => {
       });
     }
 
-    const endTime = new Date(now.getTime() + 10 * 1000); // 10 seconds
+    const endTime = new Date(now.getTime() + 8 * 60 * 60 * 1000); // 8 hours
 
     investment.earningStarted = true;
     investment.earningCompleted = false;

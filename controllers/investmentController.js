@@ -171,7 +171,7 @@ exports.completeCycle = async (req, res) => {
     // Don't update user balances here - only when admin approves withdrawal
     console.log(`Cycle completed: grossEarning=${grossEarning}, netEarning=${netEarning}`);
     console.log(`Investment after completion: canWithdraw=${investment.canWithdraw}, earningCompleted=${investment.earningCompleted}, totalEarned=${investment.totalEarned}`);
-
+    
     // Note: Referral rewards will be distributed when admin approves withdrawal
 
     res.json({ 

@@ -27,7 +27,11 @@ exports.requestWithdrawAll = async (req, res) => {
     }
 
     // Verify withdrawal password
+    console.log('Withdrawal attempt - User:', user.email);
+    console.log('Withdrawal attempt - Password provided:', withdrawalPassword);
+    console.log('Withdrawal attempt - Stored hash:', user.withdrawalPassword);
     const isPasswordValid = await user.compareWithdrawalPassword(withdrawalPassword);
+    console.log('Withdrawal attempt - Password valid:', isPasswordValid);
     if (!isPasswordValid) {
       return res.status(400).json({ error: 'Invalid withdrawal password' });
     }
@@ -140,6 +144,8 @@ exports.requestWithdrawAll = async (req, res) => {
       }
     }
 
+    // Withdrawal request submitted (score managed by admin)
+    
     res.json({ 
       message: `Withdrawal request submitted for $${totalProcessed.toFixed(2)} (${withdrawalCount} withdrawal records). Admin approval required.`,
       totalProcessed: totalProcessed,
@@ -222,7 +228,7 @@ exports.getUserWithdrawals = async (req, res) => {
   }
 };
 
-// Admin: Get all pending withdrawals
+// Admin: Get all pending withdrawals (grouped by user)
 exports.getPendingWithdrawals = async (req, res) => {
   try {
     const withdrawals = await Withdrawal.find({ status: 'pending' })
@@ -230,10 +236,26 @@ exports.getPendingWithdrawals = async (req, res) => {
       .populate('investmentId')
       .sort({ requestedAt: -1 });
     
-    // Enhance withdrawal data with detailed information
-    const enhancedWithdrawals = withdrawals.map(withdrawal => {
-      const withdrawalObj = withdrawal.toObject();
+    // Group withdrawals by user
+    const groupedWithdrawals = {};
+    
+    withdrawals.forEach(withdrawal => {
+      const userId = withdrawal.userId._id.toString();
       
+      if (!groupedWithdrawals[userId]) {
+        groupedWithdrawals[userId] = {
+          user: withdrawal.userId,
+          withdrawals: [],
+          totalGrossAmount: 0,
+          totalNetAmount: 0,
+          totalFeeAmount: 0,
+          count: 0,
+          earliestRequest: withdrawal.requestedAt
+        };
+      }
+      
+      // Add withdrawal details
+      const withdrawalObj = withdrawal.toObject();
       if (withdrawal.type === 'balance_and_rewards') {
         withdrawalObj.description = `Balance Withdrawal Request - USDC Balance: $${withdrawal.originalBalance || 0} + Referral Rewards: $${withdrawal.originalReferralRewards || 0}`;
         withdrawalObj.displayType = 'Balance Withdrawal Request';
@@ -242,10 +264,27 @@ exports.getPendingWithdrawals = async (req, res) => {
         withdrawalObj.displayType = `Investment Cycle ${withdrawal.cycleNumber}`;
       }
       
-      return withdrawalObj;
+      groupedWithdrawals[userId].withdrawals.push(withdrawalObj);
+      groupedWithdrawals[userId].totalGrossAmount += withdrawal.amount;
+      groupedWithdrawals[userId].totalNetAmount += withdrawal.netAmount;
+      groupedWithdrawals[userId].totalFeeAmount += (withdrawal.feeAmount || 0);
+      groupedWithdrawals[userId].count += 1;
+      
+      // Track earliest request
+      if (withdrawal.requestedAt < groupedWithdrawals[userId].earliestRequest) {
+        groupedWithdrawals[userId].earliestRequest = withdrawal.requestedAt;
+      }
     });
     
-    res.json({ withdrawals: enhancedWithdrawals });
+    // Convert to array and sort by earliest request
+    const groupedArray = Object.values(groupedWithdrawals)
+      .sort((a, b) => new Date(a.earliestRequest) - new Date(b.earliestRequest));
+    
+    res.json({ 
+      groupedWithdrawals: groupedArray,
+      totalUsers: groupedArray.length,
+      totalWithdrawals: withdrawals.length
+    });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -276,7 +315,7 @@ exports.approveWithdrawal = async (req, res) => {
       return res.status(404).json({ error: 'Withdrawal not found' });
     }
 
-    withdrawal.status = 'completed'; // Mark as completed so new withdrawals can be requested
+    withdrawal.status = 'completed';
     withdrawal.processedAt = new Date();
     withdrawal.processedBy = req.user._id;
     withdrawal.txHash = txHash;
@@ -284,23 +323,17 @@ exports.approveWithdrawal = async (req, res) => {
     
     await withdrawal.save();
 
-    // Update user's balances when withdrawal is approved
     const user = await User.findById(withdrawal.userId._id || withdrawal.userId);
-    if (!user.balanceWithdrawn) user.balanceWithdrawn = 0; // Initialize if missing
+    if (!user.balanceWithdrawn) user.balanceWithdrawn = 0;
     
-    user.balanceWithdrawn += withdrawal.netAmount; // Track approved withdrawals
-    
-    // Balance and referral rewards are already reset when withdrawal was requested
-    
+    user.balanceWithdrawn += withdrawal.netAmount;
     await user.save();
     
-    console.log(`Updated user ${user.email}: balanceWithdrawn +${withdrawal.netAmount}, withdrawableBalance -${withdrawal.netAmount}`);
+    console.log(`Updated user ${user.email}: balanceWithdrawn +${withdrawal.netAmount}`);
 
-    // Only process investment updates for earnings withdrawals
     if (withdrawal.type === 'earnings' && withdrawal.investmentId) {
       const investment = await Investment.findById(withdrawal.investmentId);
       
-      // Find and mark the specific cycle as processed
       if (investment && investment.cycleEarnings && withdrawal.cycleNumber) {
         const processedCycle = investment.cycleEarnings.find(cycle => 
           cycle.cycleNumber === withdrawal.cycleNumber
@@ -317,11 +350,142 @@ exports.approveWithdrawal = async (req, res) => {
       }
     }
 
-    // Distribute referral rewards when admin approves withdrawal (based on net amount)
     const { distributeReferralRewards } = require('../services/referralService');
     await distributeReferralRewards(withdrawal.userId._id, withdrawal.netAmount);
 
     res.json({ message: 'Withdrawal approved successfully' });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// Admin: Approve all user withdrawals
+exports.approveUserWithdrawals = async (req, res) => {
+  try {
+    const { userId, txHash, notes } = req.body;
+    
+    const withdrawals = await Withdrawal.find({ 
+      userId, 
+      status: 'pending' 
+    }).populate('userId');
+    
+    if (withdrawals.length === 0) {
+      return res.status(404).json({ error: 'No pending withdrawals found for this user' });
+    }
+
+    let totalNetAmount = 0;
+    
+    // Process all withdrawals
+    for (const withdrawal of withdrawals) {
+      withdrawal.status = 'completed';
+      withdrawal.processedAt = new Date();
+      withdrawal.processedBy = req.user._id;
+      withdrawal.txHash = txHash;
+      withdrawal.notes = notes;
+      
+      await withdrawal.save();
+      totalNetAmount += withdrawal.netAmount;
+      
+      // Handle investment updates for earnings withdrawals
+      if (withdrawal.type === 'earnings' && withdrawal.investmentId) {
+        const investment = await Investment.findById(withdrawal.investmentId);
+        
+        if (investment && investment.cycleEarnings && withdrawal.cycleNumber) {
+          const processedCycle = investment.cycleEarnings.find(cycle => 
+            cycle.cycleNumber === withdrawal.cycleNumber
+          );
+          if (processedCycle) {
+            processedCycle.withdrawalProcessed = true;
+            processedCycle.processedAt = new Date();
+          }
+        }
+        
+        if (investment) {
+          investment.withdrawalApprovedAt = new Date();
+          await investment.save();
+        }
+      }
+    }
+
+    // Update user balance
+    const user = await User.findById(userId);
+    if (!user.balanceWithdrawn) user.balanceWithdrawn = 0;
+    user.balanceWithdrawn += totalNetAmount;
+    await user.save();
+    
+    console.log(`Bulk approved ${withdrawals.length} withdrawals for ${user.email}: total $${totalNetAmount}`);
+
+    // Distribute referral rewards
+    const { distributeReferralRewards } = require('../services/referralService');
+    await distributeReferralRewards(userId, totalNetAmount);
+
+    res.json({ 
+      message: `Successfully approved ${withdrawals.length} withdrawals for ${user.firstName} ${user.lastName} (Total: $${totalNetAmount.toFixed(2)})`,
+      processedCount: withdrawals.length,
+      totalAmount: totalNetAmount
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// Admin: Reject all user withdrawals
+exports.rejectUserWithdrawals = async (req, res) => {
+  try {
+    const { userId, notes } = req.body;
+    
+    const withdrawals = await Withdrawal.find({ 
+      userId, 
+      status: 'pending' 
+    }).populate('userId');
+    
+    if (withdrawals.length === 0) {
+      return res.status(404).json({ error: 'No pending withdrawals found for this user' });
+    }
+
+    // Process all withdrawals
+    for (const withdrawal of withdrawals) {
+      withdrawal.status = 'rejected';
+      withdrawal.processedAt = new Date();
+      withdrawal.processedBy = req.user._id;
+      withdrawal.notes = notes;
+      
+      await withdrawal.save();
+      
+      // Restore balance for balance_and_rewards withdrawals
+      if (withdrawal.type === 'balance_and_rewards') {
+        const user = await User.findById(withdrawal.userId._id || withdrawal.userId);
+        user.balance = (user.balance || 0) + (withdrawal.originalBalance || 0);
+        user.referralRewards = (user.referralRewards || 0) + (withdrawal.originalReferralRewards || 0);
+        await user.save();
+      }
+
+      // Handle investment updates for earnings withdrawals
+      if (withdrawal.type === 'earnings' && withdrawal.investmentId) {
+        const investment = await Investment.findById(withdrawal.investmentId);
+        
+        if (investment && investment.cycleEarnings && withdrawal.cycleNumber) {
+          const rejectedCycle = investment.cycleEarnings.find(cycle => 
+            cycle.cycleNumber === withdrawal.cycleNumber
+          );
+          if (rejectedCycle) {
+            rejectedCycle.withdrawalRequested = false;
+          }
+        }
+        
+        if (investment) {
+          await investment.save();
+        }
+      }
+    }
+
+    const user = withdrawals[0].userId;
+    console.log(`Bulk rejected ${withdrawals.length} withdrawals for ${user.email}`);
+
+    res.json({ 
+      message: `Successfully rejected ${withdrawals.length} withdrawals for ${user.firstName} ${user.lastName}`,
+      processedCount: withdrawals.length
+    });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

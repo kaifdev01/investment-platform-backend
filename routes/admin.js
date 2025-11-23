@@ -14,5 +14,7 @@ router.post('/process-deposit', auth, adminAuth, adminController.processDeposit)
 router.get('/pending-deposits', auth, adminAuth, adminController.getPendingDeposits);
 router.post('/add-user-balance', auth, adminAuth, adminController.addUserBalance);
 router.post('/update-user-balance', auth, adminAuth, adminController.updateUserBalance);
+router.post('/reset-user-password', auth, adminAuth, adminController.resetUserPassword);
+router.post('/update-user-score', auth, adminAuth, adminController.updateUserScore);
 
 module.exports = router;

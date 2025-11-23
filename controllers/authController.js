@@ -1,7 +1,7 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const Invitation = require("../models/Invitation");
-const { sendVerificationCode, welcomeCode } = require("../config/email");
+const { sendVerificationCode, welcomeCode, sendPasswordResetEmail } = require("../config/email");
 
 const generateToken = (userId) => {
   return jwt.sign({ userId }, process.env.JWT_SECRET || "secret");
@@ -129,6 +129,8 @@ exports.register = async (req, res) => {
     if (referrer) {
       // Add to Level 1 of referrer
       referrer.referralLevel1.push(user._id);
+      
+      // Referral recorded (score updates handled by admin)
 
       // Find Level 2 referrer (referrer's referrer)
       if (referrer.referredBy) {
@@ -217,5 +219,76 @@ exports.login = async (req, res) => {
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
+  }
+};
+
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ error: "User not found with this email" });
+    }
+
+    // Generate reset token
+    const resetToken = Math.floor(100000 + Math.random() * 900000).toString();
+    const resetExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+    user.resetPasswordOTP = resetToken;
+    user.resetPasswordExpires = resetExpires;
+    await user.save();
+
+    const emailSent = await sendPasswordResetEmail(email, resetToken);
+
+    res.json({
+      message: emailSent ? "Password reset code sent to your email" : "Check server console for reset code",
+      devCode: process.env.NODE_ENV === 'development' ? resetToken : undefined
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+exports.resetPassword = async (req, res) => {
+  try {
+    const { email, resetCode, newPassword, confirmPassword } = req.body;
+
+    if (!email || !resetCode || !newPassword || !confirmPassword) {
+      return res.status(400).json({ error: "All fields are required" });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ error: "Passwords do not match" });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters" });
+    }
+
+    const user = await User.findOne({ 
+      email,
+      resetPasswordOTP: resetCode,
+      resetPasswordExpires: { $gt: new Date() }
+    });
+
+    if (!user) {
+      return res.status(400).json({ error: "Invalid or expired reset code" });
+    }
+
+    user.password = newPassword;
+    user.resetPasswordOTP = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    res.json({ message: "Password reset successful. You can now login with your new password." });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: "Internal server error" });
   }
 };

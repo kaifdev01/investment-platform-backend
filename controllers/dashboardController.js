@@ -37,7 +37,8 @@ exports.getDashboard = async (req, res) => {
         withdrawableBalance: Math.max(0, withdrawableBalance), // Current cycle net earnings
         balanceWithdrawn: user.balanceWithdrawn || 0, // Amount admin has approved
         referralRewards: user.referralRewards,
-        withdrawalWallet: user.withdrawalWallet
+        withdrawalWallet: user.withdrawalWallet,
+        score: user.score || 0
       },
       activeInvestments: investments
     });

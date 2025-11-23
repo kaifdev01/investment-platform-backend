@@ -59,7 +59,15 @@ exports.processDeposit = async (req, res) => {
     
     // Update user balance
     const user = await User.findById(deposit.userId._id);
+    const isFirstDeposit = user.balance === 0 && user.totalInvestment === 0;
     user.balance += deposit.amount;
+    
+    // Give 50 points for first deposit
+    if (isFirstDeposit && user.score === 0) {
+      user.score = 50;
+      console.log(`First deposit bonus: 50 points awarded to ${user.email}`);
+    }
+    
     await user.save();
     
     // Process referral reward (5% of deposit)
@@ -242,6 +250,69 @@ exports.updateUserBalance = async (req, res) => {
       newBalance: user.balance,
       difference: difference,
       deposit: deposit
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Admin reset user password
+exports.resetUserPassword = async (req, res) => {
+  try {
+    const { userId, newPassword } = req.body;
+    
+    if (!userId || !newPassword) {
+      return res.status(400).json({ error: 'User ID and new password are required' });
+    }
+    
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+    
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Update user password (will be hashed by pre-save middleware)
+    user.password = newPassword;
+    await user.save();
+    
+    res.json({ 
+      message: `Password successfully reset for ${user.firstName} ${user.lastName} (${user.email})`
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Admin update user score
+exports.updateUserScore = async (req, res) => {
+  try {
+    const { userId, scoreChange, note } = req.body;
+    
+    if (!userId || scoreChange === undefined) {
+      return res.status(400).json({ error: 'User ID and score change are required' });
+    }
+    
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const oldScore = user.score || 50;
+    const newScore = Math.max(0, oldScore + parseInt(scoreChange));
+    
+    user.score = newScore;
+    await user.save();
+    
+    console.log(`Admin score update: ${user.email} - ${oldScore} → ${newScore} (${scoreChange >= 0 ? '+' : ''}${scoreChange}) - ${note || 'No note'}`);
+    
+    res.json({ 
+      message: `Score updated for ${user.firstName} ${user.lastName}: ${oldScore} → ${newScore} (${scoreChange >= 0 ? '+' : ''}${scoreChange})`,
+      oldScore,
+      newScore,
+      scoreChange: parseInt(scoreChange)
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

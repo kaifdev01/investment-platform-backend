@@ -7,6 +7,7 @@ const { getMe } = require('../controllers/meController');
 const { updateProfile } = require('../controllers/profileController');
 const { simulateDeposit, getDepositHistory, processDeposit } = require('../controllers/depositController');
 const { startCycle, claimReward, getActiveCycles } = require('../controllers/earningController');
+const { getUserScore, getLeaderboard } = require('../controllers/scoreController');
 const simpleDepositService = require('../services/simpleDepositService');
 const auth = require('../middleware/auth');
 
@@ -50,6 +51,8 @@ router.post('/process-deposit', auth, processDeposit);
 router.post('/start-cycle', auth, startCycle);
 router.post('/claim-reward', auth, claimReward);
 router.get('/active-cycles', auth, getActiveCycles);
+router.get('/score', auth, getUserScore);
+router.get('/leaderboard', auth, getLeaderboard);
 
 // Manual deposit processing
 router.post('/admin/manual-process/:depositId', auth, async (req, res) => {
@@ -151,6 +154,8 @@ router.put('/admin/update-email', auth, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+
 
 // System Analytics
 router.get('/admin/analytics', auth, async (req, res) => {

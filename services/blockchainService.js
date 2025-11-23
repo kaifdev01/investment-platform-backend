@@ -112,7 +112,15 @@ class BlockchainService {
       await deposit.save();
       
       // Update user balance
+      const isFirstDeposit = user.balance === 0 && user.totalInvestment === 0;
       user.balance += amount;
+      
+      // Give 50 points for first deposit
+      if (isFirstDeposit && user.score === 0) {
+        user.score = 50;
+        console.log(`First deposit bonus: 50 points awarded to ${user.email}`);
+      }
+      
       await user.save();
       
       console.log(`✅ Processed deposit: $${amount} USDC for user ${user.email}`);

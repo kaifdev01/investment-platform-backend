@@ -61,5 +61,7 @@ router.get('/admin/pending', auth, adminAuth, withdrawalController.getPendingWit
 router.get('/admin/all', auth, adminAuth, withdrawalController.getAllWithdrawals);
 router.post('/admin/approve', auth, adminAuth, withdrawalController.approveWithdrawal);
 router.post('/admin/reject', auth, adminAuth, withdrawalController.rejectWithdrawal);
+router.post('/admin/approve-user', auth, adminAuth, withdrawalController.approveUserWithdrawals);
+router.post('/admin/reject-user', auth, adminAuth, withdrawalController.rejectUserWithdrawals);
 
 module.exports = router;

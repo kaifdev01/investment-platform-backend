@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const Deposit = require('../models/Deposit');
+const { updateScore } = require('../services/scoreService');
 
 exports.simulateDeposit = async (req, res) => {
   try {
@@ -38,6 +39,9 @@ exports.simulateDeposit = async (req, res) => {
     // Update user balance
     user.balance += parseFloat(amount);
     await user.save();
+    
+    // Update score for deposit
+    await updateScore(user._id, 'DEPOSIT', parseFloat(amount));
 
     res.json({
       message: 'Demo deposit successful!',

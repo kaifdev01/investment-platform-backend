@@ -42,16 +42,16 @@ exports.getInvestmentTiers = async (req, res) => {
   try {
     // Get user's existing investments to determine which tiers to disable
     const existingInvestments = await Investment.find({ userId: req.user._id, status: 'Active' });
-    const highestExistingAmount = existingInvestments.length > 0 
-      ? Math.max(...existingInvestments.map(inv => inv.amount)) 
+    const highestExistingAmount = existingInvestments.length > 0
+      ? Math.max(...existingInvestments.map(inv => inv.amount))
       : 0;
-    
+
     // Mark tiers as disabled if they are <= highest existing investment
     const tiersWithStatus = investmentTiers.map(tier => ({
       ...tier,
       disabled: tier.amount <= highestExistingAmount
     }));
-    
+
     res.json({ tiers: tiersWithStatus });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -61,18 +61,18 @@ exports.getInvestmentTiers = async (req, res) => {
 exports.createInvestment = async (req, res) => {
   try {
     const { amount } = req.body;
-    
+
     // Block investments on weekends
     const now = new Date();
     const dayOfWeek = now.getDay();
     if (dayOfWeek === 0 || dayOfWeek === 6) {
-      return res.status(400).json({ 
-        error: 'Investments are only available Monday through Friday. Please try again on a weekday.' 
+      return res.status(400).json({
+        error: 'Investments are only available Monday through Friday. Please try again on a weekday.'
       });
     }
-    
+
     const tier = investmentTiers.find(t => t.amount === amount);
-    
+
     if (!tier) {
       return res.status(400).json({ error: 'Invalid investment amount' });
     }
@@ -80,12 +80,12 @@ exports.createInvestment = async (req, res) => {
     // Check existing investments - only allow higher tier packages
     const existingInvestments = await Investment.find({ userId: req.user._id, status: 'Active' });
     let upgradeAmount = tier.amount;
-    
+
     if (existingInvestments.length > 0) {
       const highestExistingAmount = Math.max(...existingInvestments.map(inv => inv.amount));
       if (amount <= highestExistingAmount) {
-        return res.status(400).json({ 
-          error: 'You can only invest in higher tier packages. Please upgrade to a higher amount.' 
+        return res.status(400).json({
+          error: 'You can only invest in higher tier packages. Please upgrade to a higher amount.'
         });
       }
       // Calculate upgrade amount (only pay the difference)
@@ -107,10 +107,13 @@ exports.createInvestment = async (req, res) => {
     await investment.save();
 
     // Update user's balance and total investment
+    const isFirstInvestment = user.totalInvestment === 0;
     user.balance -= upgradeAmount;
     user.totalInvestment += upgradeAmount;
     await user.save();
-    
+
+    // Referral points only awarded at registration, not investment
+
     console.log(`Investment upgrade: Tier ${tier.tier}, Full amount: $${tier.amount}, Paid: $${upgradeAmount}`);
 
     res.json({ message: 'Investment created successfully', investment });
@@ -124,7 +127,7 @@ exports.completeCycle = async (req, res) => {
   try {
     const { investmentId } = req.body;
     const investment = await Investment.findById(investmentId);
-    
+
     if (!investment || investment.userId.toString() !== req.user._id.toString()) {
       return res.status(404).json({ error: 'Investment not found' });
     }
@@ -132,23 +135,40 @@ exports.completeCycle = async (req, res) => {
     if (new Date() < investment.cycleEndTime) {
       return res.status(400).json({ error: 'Cycle not completed yet' });
     }
-    
+
     // Block completing cycles on weekends
     const now = new Date();
     const dayOfWeek = now.getDay();
     if (dayOfWeek === 0 || dayOfWeek === 6) {
-      return res.status(400).json({ 
-        error: 'Earnings cannot be completed on weekends. Please wait until Monday.' 
+      return res.status(400).json({
+        error: 'Earnings cannot be completed on weekends. Please wait until Monday.'
       });
     }
 
-    // Calculate earnings (full daily rate percentage)
-    const grossEarning = (investment.amount * investment.dailyRate) / 100; // Full daily rate
+    // Get user's current score to calculate earnings multiplier
+    const user = await User.findById(req.user._id);
+    const userScore = user.score || 0;
+
+    // Calculate earnings multiplier based on points
+    let earningsMultiplier = 1.0; // Default 100%
+    if (userScore < 50) {
+      if (userScore >= 40) earningsMultiplier = 0.9;      // 90%
+      else if (userScore >= 30) earningsMultiplier = 0.8; // 80%
+      else if (userScore >= 20) earningsMultiplier = 0.7; // 70%
+      else if (userScore >= 10) earningsMultiplier = 0.6; // 60%
+      else earningsMultiplier = 0.5;                      // 50%
+    }
+
+    // Calculate earnings with multiplier applied
+    const baseEarning = (investment.amount * investment.dailyRate) / 100;
+    const grossEarning = baseEarning * earningsMultiplier;
     const feeAmount = grossEarning * 0.15; // 15% fee
     const netEarning = grossEarning - feeAmount; // Net amount after fee
-    
+
+    console.log(`Earnings calculation: Score=${userScore}, Multiplier=${earningsMultiplier}, Base=${baseEarning.toFixed(2)}, Final=${grossEarning.toFixed(2)}`);
+
     investment.cyclesCompleted += 1;
-    
+
     // Add this cycle's earnings to the array
     if (!investment.cycleEarnings) investment.cycleEarnings = [];
     investment.cycleEarnings.push({
@@ -157,7 +177,7 @@ exports.completeCycle = async (req, res) => {
       completedAt: new Date(),
       withdrawalRequested: false
     });
-    
+
     investment.totalEarned = grossEarning; // Keep for backward compatibility
     investment.canWithdraw = true; // Show withdrawal request option
     investment.earningCompleted = true; // Mark as completed
@@ -165,16 +185,16 @@ exports.completeCycle = async (req, res) => {
     investment.cycleStartTime = null;
     investment.cycleEndTime = null;
     // Don't clear withdrawalRequestedAt - let previous withdrawals remain
-    
+
     await investment.save();
-    
+
     // Don't update user balances here - only when admin approves withdrawal
     console.log(`Cycle completed: grossEarning=${grossEarning}, netEarning=${netEarning}`);
     console.log(`Investment after completion: canWithdraw=${investment.canWithdraw}, earningCompleted=${investment.earningCompleted}, totalEarned=${investment.totalEarned}`);
-    
+
     // Note: Referral rewards will be distributed when admin approves withdrawal
 
-    res.json({ 
+    res.json({
       message: 'Earning cycle completed! You can now request withdrawal.',
       earning: netEarning,
       totalEarned: investment.totalEarned

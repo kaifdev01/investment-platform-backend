@@ -130,7 +130,9 @@ exports.register = async (req, res) => {
       // Add to Level 1 of referrer
       referrer.referralLevel1.push(user._id);
       
-      // Referral recorded (score updates handled by admin)
+      // Award 3 points to referrer for successful referral registration
+      referrer.score = (referrer.score || 0) + 3;
+      console.log(`Referral registration bonus: 3 points awarded to ${referrer.email} for ${user.email}'s registration`);
 
       // Find Level 2 referrer (referrer's referrer)
       if (referrer.referredBy) {

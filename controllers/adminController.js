@@ -318,3 +318,33 @@ exports.updateUserScore = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+// Admin reset user withdrawal password
+exports.resetUserWithdrawalPassword = async (req, res) => {
+  try {
+    const { userId, newWithdrawalPassword } = req.body;
+    
+    if (!userId || !newWithdrawalPassword) {
+      return res.status(400).json({ error: 'User ID and new withdrawal password are required' });
+    }
+    
+    if (newWithdrawalPassword.length < 6) {
+      return res.status(400).json({ error: 'Withdrawal password must be at least 6 characters' });
+    }
+    
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Update user withdrawal password (will be hashed by pre-save middleware)
+    user.withdrawalPassword = newWithdrawalPassword;
+    await user.save();
+    
+    res.json({ 
+      message: `Withdrawal password successfully reset for ${user.firstName} ${user.lastName} (${user.email})`
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};

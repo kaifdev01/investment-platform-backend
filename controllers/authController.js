@@ -294,3 +294,76 @@ exports.resetPassword = async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
+exports.forgotWithdrawalPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    console.log('Withdrawal password reset request for:', email);
+
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ error: "User not found with this email" });
+    }
+
+    const resetToken = Math.floor(100000 + Math.random() * 900000).toString();
+    const resetExpires = new Date(Date.now() + 15 * 60 * 1000);
+
+    user.resetWithdrawalPasswordOTP = resetToken;
+    user.resetWithdrawalPasswordExpires = resetExpires;
+    await user.save();
+    console.log('Reset token saved for user:', email, 'Token:', resetToken);
+
+    const emailSent = await sendPasswordResetEmail(email, resetToken, 'withdrawal');
+    console.log('Email sent status:', emailSent);
+
+    res.json({
+      message: emailSent ? "Withdrawal password reset code sent to your email" : "Reset code generated. Check server console for code.",
+      devCode: process.env.NODE_ENV === 'development' ? resetToken : undefined
+    });
+  } catch (error) {
+    console.error('Forgot withdrawal password error:', error);
+    res.status(500).json({ error: error.message || "Internal server error" });
+  }
+};
+
+exports.resetWithdrawalPassword = async (req, res) => {
+  try {
+    const { email, resetCode, newWithdrawalPassword, confirmWithdrawalPassword } = req.body;
+
+    if (!email || !resetCode || !newWithdrawalPassword || !confirmWithdrawalPassword) {
+      return res.status(400).json({ error: "All fields are required" });
+    }
+
+    if (newWithdrawalPassword !== confirmWithdrawalPassword) {
+      return res.status(400).json({ error: "Passwords do not match" });
+    }
+
+    if (newWithdrawalPassword.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters" });
+    }
+
+    const user = await User.findOne({ 
+      email,
+      resetWithdrawalPasswordOTP: resetCode,
+      resetWithdrawalPasswordExpires: { $gt: new Date() }
+    });
+
+    if (!user) {
+      return res.status(400).json({ error: "Invalid or expired reset code" });
+    }
+
+    user.withdrawalPassword = newWithdrawalPassword;
+    user.resetWithdrawalPasswordOTP = undefined;
+    user.resetWithdrawalPasswordExpires = undefined;
+    await user.save();
+
+    res.json({ message: "Withdrawal password reset successful." });
+  } catch (error) {
+    console.error('Reset withdrawal password error:', error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};

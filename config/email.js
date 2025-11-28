@@ -40,7 +40,7 @@ const sendPasswordResetEmail = async (email, resetCode, type = 'login') => {
     console.log(`📧 Sending ${isWithdrawal ? 'withdrawal ' : ''}password reset code ${resetCode} to ${email}`);
 
     const response = await transporter.sendMail({
-      from: '"HPR FARM" <adeelimran467@gmail.com>',
+      from: '"HPR FARM" <infohprfarm@gmail.com>',
       to: email,
       subject: subject,
       text: `Your ${isWithdrawal ? 'withdrawal ' : ''}password reset code is: ${resetCode}`,
@@ -57,7 +57,7 @@ const sendPasswordResetEmail = async (email, resetCode, type = 'login') => {
             <p style="color: #666; font-size: 16px; line-height: 1.6;">This code will expire in 15 minutes for security reasons.</p>
             <p style="color: #666; font-size: 16px; line-height: 1.6;">If you didn't request this password reset, please ignore this email.</p>
             <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-            <p style="color: #999; font-size: 14px; text-align: center;">Hpr Farm Team</p>
+            <p style="color: #999; font-size: 14px; text-align: center;">HPR Farm Team</p>
           </div>
         </div>
       `
@@ -65,7 +65,7 @@ const sendPasswordResetEmail = async (email, resetCode, type = 'login') => {
     console.log(`✅ ${isWithdrawal ? 'Withdrawal ' : ''}Password reset email sent successfully`, response.messageId);
     return true;
   } catch (err) {
-    console.error(`❌ ${type} password reset email failed:`, err.message);
+    console.error(`❌ ${type} password reset email failed:`, err.message, err.stack);
     console.log(`🔧 DEV MODE: ${type} password reset code for ${email} is: ${resetCode}`);
     return false;
   }

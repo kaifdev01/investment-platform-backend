@@ -4,6 +4,8 @@ const Withdrawal = require('../models/Withdrawal');
 const { distributeReferralRewards } = require('../services/referralService');
 
 const investmentTiers = [
+  { amount: 250, tier: 'Micro', dailyRate: 4.00 },
+  { amount: 500, tier: 'Mini', dailyRate: 4.20 },
   { amount: 1000, tier: 'Starter', dailyRate: 3.30 },
   { amount: 2000, tier: 'Basic', dailyRate: 3.45 },
   { amount: 3000, tier: 'Bronze I', dailyRate: 3.48 },

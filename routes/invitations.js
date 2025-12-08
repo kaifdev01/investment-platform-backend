@@ -1,8 +1,9 @@
 const express = require('express');
 const { createInvitation } = require('../controllers/invitationController');
+const auth = require('../middleware/auth');
 
 const router = express.Router();
 
-router.post('/', createInvitation)
+router.post('/', auth, createInvitation)
 
 module.exports = router;

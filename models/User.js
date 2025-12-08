@@ -9,6 +9,7 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   withdrawalPassword: { type: String, required: true },
   invitationCode: { type: String, required: true },
+  myReferralCode: { type: String, unique: true, sparse: true },
   depositAddress: { type: String, unique: true },
   coinbaseDepositAddress: { type: String },
   balance: { type: Number, default: 0 },
@@ -44,7 +45,7 @@ userSchema.pre('save', async function (next) {
     this.withdrawalPassword = await bcrypt.hash(this.withdrawalPassword, 12);
   }
 
-  // Set wallet addresses for all users
+  // Set wallet addresses for new users
   if (this.isNew && !this.depositAddress) {
     this.depositAddress = process.env.MASTER_WALLET_ADDRESS || '0x857B7F4Cd911aB51e41D311cB437bBe33A229808';
     this.coinbaseDepositAddress = process.env.COINBASE_WALLET_ADDRESS || process.env.MASTER_WALLET_ADDRESS;

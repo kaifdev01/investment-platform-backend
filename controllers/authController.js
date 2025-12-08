@@ -99,16 +99,11 @@ exports.register = async (req, res) => {
       return res.status(400).json({ error: "Email already registered" });
     }
 
-    const invitation = await Invitation.findOne({
-      code: invitationCode,
-      used: false,
-    });
-    if (!invitation) {
+    // Find referrer by their permanent referral code
+    const referrer = await User.findOne({ myReferralCode: invitationCode });
+    if (!referrer) {
       return res.status(400).json({ error: "Invalid invitation code" });
     }
-
-    // Find referrer (who created the invitation)
-    const referrer = await User.findById(invitation.createdBy);
 
     // Create new user
     const user = new User({
@@ -124,6 +119,13 @@ exports.register = async (req, res) => {
     });
 
     await user.save();
+    
+    // Generate permanent referral code after user is saved (so we have _id)
+    const userId = user._id.toString();
+    const createdTime = user.createdAt.getTime().toString(36);
+    user.myReferralCode = userId.substring(userId.length - 6) + createdTime.substring(createdTime.length - 4);
+    await user.save();
+    console.log(`Generated permanent code for new user ${user.email}: ${user.myReferralCode}`);
 
     // Build referral tree
     if (referrer) {
@@ -156,10 +158,6 @@ exports.register = async (req, res) => {
 
     // Remove verification code from temporary storage
     verificationCodes.delete(email);
-
-    invitation.used = true;
-    invitation.usedBy = user._id;
-    await invitation.save();
 
     const token = generateToken(user._id);
 

@@ -18,4 +18,13 @@ const auth = async (req, res, next) => {
   }
 };
 
+const isAdmin = (req, res, next) => {
+  if (!req.user.isAdmin) {
+    return res.status(403).json({ error: 'Access denied. Admin only.' });
+  }
+  next();
+};
+
 module.exports = auth;
+module.exports.authenticate = auth;
+module.exports.isAdmin = isAdmin;

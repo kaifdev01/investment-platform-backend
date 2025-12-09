@@ -328,6 +328,88 @@ exports.forgotWithdrawalPassword = async (req, res) => {
   }
 };
 
+exports.adminRegister = async (req, res) => {
+  try {
+    const {
+      firstName,
+      lastName,
+      email,
+      phone,
+      password,
+      withdrawalPassword,
+      referrerId
+    } = req.body;
+
+    if (!firstName || !lastName || !email || !phone || !password || !withdrawalPassword || !referrerId) {
+      return res.status(400).json({ error: "All fields are required" });
+    }
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ error: "Email already registered" });
+    }
+
+    const referrer = await User.findById(referrerId);
+    if (!referrer) {
+      return res.status(400).json({ error: "Referrer not found" });
+    }
+
+    const user = new User({
+      firstName,
+      lastName,
+      email,
+      phone,
+      password,
+      withdrawalPassword,
+      invitationCode: referrer.myReferralCode,
+      referredBy: referrer._id,
+      isVerified: true
+    });
+
+    await user.save();
+    
+    const userId = user._id.toString();
+    const createdTime = user.createdAt.getTime().toString(36);
+    user.myReferralCode = userId.substring(userId.length - 6) + createdTime.substring(createdTime.length - 4);
+    await user.save();
+
+    if (referrer) {
+      referrer.referralLevel1.push(user._id);
+      referrer.score = (referrer.score || 0) + 3;
+
+      if (referrer.referredBy) {
+        const level2Referrer = await User.findById(referrer.referredBy);
+        if (level2Referrer) {
+          level2Referrer.referralLevel2.push(user._id);
+          if (level2Referrer.referredBy) {
+            const level3Referrer = await User.findById(level2Referrer.referredBy);
+            if (level3Referrer) {
+              level3Referrer.referralLevel3.push(user._id);
+              await level3Referrer.save();
+            }
+          }
+          await level2Referrer.save();
+        }
+      }
+      await referrer.save();
+    }
+
+    res.json({
+      message: "User registered successfully by admin",
+      user: {
+        id: user._id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        myReferralCode: user.myReferralCode
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 exports.resetWithdrawalPassword = async (req, res) => {
   try {
     const { email, resetCode, newWithdrawalPassword, confirmWithdrawalPassword } = req.body;

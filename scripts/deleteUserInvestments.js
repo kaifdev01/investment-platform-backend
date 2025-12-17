@@ -1,46 +1,31 @@
-require('dotenv').config();
 const mongoose = require('mongoose');
 const User = require('../models/User');
 const Investment = require('../models/Investment');
-const Withdrawal = require('../models/Withdrawal');
+require('dotenv').config();
 
 const deleteUserInvestments = async () => {
   try {
     await mongoose.connect(process.env.MONGODB_URI);
+    console.log('Connected to MongoDB');
 
-    const userEmail = 'kaifm9096@gmail.com';
-
-    // Find user
-    const user = await User.findOne({ email: userEmail });
+    const user = await User.findOne({ email: 'kaifm9096@gmail.com' });
     if (!user) {
       console.log('User not found');
-      return;
+      process.exit(1);
     }
 
-    console.log(`Found user: ${user.firstName} ${user.lastName} (${user.email})`);
+    const result = await Investment.deleteMany({ userId: user._id });
+    console.log(`Deleted ${result.deletedCount} investments for ${user.email}`);
 
-    // Delete all investments for this user
-    const deletedInvestments = await Investment.deleteMany({ userId: user._id });
-    console.log(`Deleted ${deletedInvestments.deletedCount} investments`);
-
-    // Delete all withdrawals for this user
-    const deletedWithdrawals = await Withdrawal.deleteMany({ userId: user._id });
-    console.log(`Deleted ${deletedWithdrawals.deletedCount} withdrawals`);
-
-    // Reset user balances
-    user.totalEarnings = 0;
-    user.withdrawableBalance = 0;
-    user.balanceWithdrawn = 0;
+    // Reset user investment totals
+    user.totalInvestment = 0;
     await user.save();
+    console.log('Reset user totalInvestment to 0');
 
-    console.log('User balances reset to 0');
-    console.log('Cleanup completed successfully');
-
+    process.exit(0);
   } catch (error) {
     console.error('Error:', error);
-  } finally {
-    await mongoose.connection.close();
-    process.exit(0);
+    process.exit(1);
   }
 };
 

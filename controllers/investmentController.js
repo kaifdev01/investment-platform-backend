@@ -5,7 +5,7 @@ const { distributeReferralRewards } = require('../services/referralService');
 
 const investmentTiers = [
   { amount: 250, tier: 'Micro', dailyRate: 4.00 },
-  { amount: 500, tier: 'Mini', dailyRate: 4.20 },
+  { amount: 500, tier: 'Mini', dailyRate: 4.94 },
   { amount: 1000, tier: 'Starter', dailyRate: 3.30 },
   { amount: 2000, tier: 'Basic', dailyRate: 3.45 },
   { amount: 3000, tier: 'Bronze I', dailyRate: 3.48 },
@@ -79,7 +79,7 @@ exports.createInvestment = async (req, res) => {
       return res.status(400).json({ error: 'Invalid investment amount' });
     }
 
-    // Check existing investments - only allow higher tier packages
+    // Production: Only allow higher tier investments
     const existingInvestments = await Investment.find({ userId: req.user._id, status: 'Active' });
     let upgradeAmount = tier.amount;
 
@@ -161,11 +161,21 @@ exports.completeCycle = async (req, res) => {
       else earningsMultiplier = 0.5;                      // 50%
     }
 
-    // Calculate earnings with multiplier applied
-    const baseEarning = (investment.amount * investment.dailyRate) / 100;
-    const grossEarning = baseEarning * earningsMultiplier;
-    const feeAmount = grossEarning * 0.15; // 15% fee
-    const netEarning = grossEarning - feeAmount; // Net amount after fee
+    // Special handling for $500 Mini tier - always exactly $21
+    let grossEarning, netEarning, feeAmount, baseEarning;
+    
+    if (investment.amount === 500 && investment.tier === 'Mini') {
+      baseEarning = 21;
+      grossEarning = 21; // Fixed $21, no score multiplier applied
+      feeAmount = 0; // No fee for Mini tier
+      netEarning = 21; // Always $21
+    } else {
+      // Calculate earnings with multiplier applied for other tiers
+      baseEarning = (investment.amount * investment.dailyRate) / 100;
+      grossEarning = baseEarning * earningsMultiplier;
+      feeAmount = grossEarning * 0.15; // 15% fee
+      netEarning = grossEarning - feeAmount; // Net amount after fee
+    }
 
     console.log(`Earnings calculation: Score=${userScore}, Multiplier=${earningsMultiplier}, Base=${baseEarning.toFixed(2)}, Final=${grossEarning.toFixed(2)}`);
 
@@ -175,12 +185,17 @@ exports.completeCycle = async (req, res) => {
     if (!investment.cycleEarnings) investment.cycleEarnings = [];
     investment.cycleEarnings.push({
       cycleNumber: investment.cyclesCompleted,
-      grossAmount: grossEarning,
+      grossAmount: netEarning, // Store net amount for Mini tier to show $21
       completedAt: new Date(),
       withdrawalRequested: false
     });
 
-    investment.totalEarned = grossEarning; // Keep for backward compatibility
+    // For Mini tier, always show $21 total regardless of previous earnings
+    if (investment.amount === 500 && investment.tier === 'Mini') {
+      investment.totalEarned = 21; // Always show $21 for Mini tier
+    } else {
+      investment.totalEarned = (investment.totalEarned || 0) + netEarning; // Accumulate for other tiers
+    }
     investment.canWithdraw = true; // Show withdrawal request option
     investment.earningCompleted = true; // Mark as completed
     investment.earningStarted = false; // Reset to allow new cycle

@@ -59,7 +59,7 @@ exports.startCycle = async (req, res) => {
       });
     }
 
-    // Get user's highest tier investment
+    // Production: Only allow earning from highest tier
     const userInvestments = await Investment.find({
       userId: req.user._id,
       status: 'Active'
@@ -95,7 +95,7 @@ exports.startCycle = async (req, res) => {
       });
     }
 
-    const endTime = new Date(now.getTime() + 8 * 60 * 60 * 1000); // 8 hours
+    const endTime = new Date(now.getTime() + 8 * 60 * 60 * 1000); // 8 hours for production
 
     investment.earningStarted = true;
     investment.earningCompleted = false;

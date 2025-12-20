@@ -27,14 +27,24 @@ exports.requestWithdrawAll = async (req, res) => {
     }
 
     // Verify withdrawal password
-    console.log('Withdrawal attempt - User:', user.email);
-    console.log('Withdrawal attempt - Password provided:', withdrawalPassword);
-    console.log('Withdrawal attempt - Stored hash:', user.withdrawalPassword);
-    const isPasswordValid = await user.compareWithdrawalPassword(withdrawalPassword);
-    console.log('Withdrawal attempt - Password valid:', isPasswordValid);
+    console.log('=== WITHDRAWAL PASSWORD VERIFICATION ===');
+    console.log('User ID:', req.user._id);
+    console.log('User email:', user.email);
+    console.log('Password provided:', withdrawalPassword);
+    console.log('Stored hash:', user.withdrawalPassword);
+    
+    // Refresh user data to ensure we have the latest withdrawal password
+    const freshUser = await User.findById(req.user._id);
+    console.log('Fresh user hash:', freshUser.withdrawalPassword);
+    console.log('Hashes match:', user.withdrawalPassword === freshUser.withdrawalPassword);
+    
+    const isPasswordValid = await freshUser.compareWithdrawalPassword(withdrawalPassword);
+    console.log('Password valid:', isPasswordValid);
+    
     if (!isPasswordValid) {
       return res.status(400).json({ error: 'Invalid withdrawal password' });
     }
+    console.log('=== PASSWORD VERIFICATION PASSED ===');
 
     // Find all investments with available earnings
     const investments = await Investment.find({ 

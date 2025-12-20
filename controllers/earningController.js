@@ -52,14 +52,14 @@ exports.startCycle = async (req, res) => {
     const now = new Date();
     const dayOfWeek = now.getDay();
 
-    // Block earning cycles on weekends
+    // Block investments on weekends
     if (dayOfWeek === 0 || dayOfWeek === 6) {
       return res.status(400).json({ 
         error: 'Earning cycles are not available on weekends. Please try again on Monday.' 
       });
     }
 
-    // Production: Only allow earning from highest tier
+    // Only allow earning from highest tier
     const userInvestments = await Investment.find({
       userId: req.user._id,
       status: 'Active'
@@ -95,6 +95,7 @@ exports.startCycle = async (req, res) => {
       });
     }
 
+    // TESTING: 8 hour cycles
     const endTime = new Date(now.getTime() + 8 * 60 * 60 * 1000); // 8 hours for production
 
     investment.earningStarted = true;
@@ -139,7 +140,7 @@ exports.claimReward = async (req, res) => {
       return res.status(400).json({ error: 'Cycle not completed yet' });
     }
 
-    // Block completing cycles on weekends
+    // Block earnings completion on weekends
     const dayOfWeek = now.getDay();
     if (dayOfWeek === 0 || dayOfWeek === 6) {
       return res.status(400).json({ error: 'Earnings cannot be completed on weekends. Please wait until Monday.' });

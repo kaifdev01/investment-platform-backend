@@ -42,16 +42,10 @@ const investmentTiers = [
 
 exports.getInvestmentTiers = async (req, res) => {
   try {
-    // Get user's existing investments to determine which tiers to disable
-    const existingInvestments = await Investment.find({ userId: req.user._id, status: 'Active' });
-    const highestExistingAmount = existingInvestments.length > 0
-      ? Math.max(...existingInvestments.map(inv => inv.amount))
-      : 0;
-
-    // Mark tiers as disabled if they are <= highest existing investment
+    // TESTING: All tiers available
     const tiersWithStatus = investmentTiers.map(tier => ({
       ...tier,
-      disabled: tier.amount <= highestExistingAmount
+      disabled: false
     }));
 
     res.json({ tiers: tiersWithStatus });
@@ -64,35 +58,14 @@ exports.createInvestment = async (req, res) => {
   try {
     const { amount } = req.body;
 
-    // Block investments on weekends
-    const now = new Date();
-    const dayOfWeek = now.getDay();
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
-      return res.status(400).json({
-        error: 'Investments are only available Monday through Friday. Please try again on a weekday.'
-      });
-    }
-
     const tier = investmentTiers.find(t => t.amount === amount);
 
     if (!tier) {
       return res.status(400).json({ error: 'Invalid investment amount' });
     }
 
-    // Production: Only allow higher tier investments
-    const existingInvestments = await Investment.find({ userId: req.user._id, status: 'Active' });
+    // TESTING: Allow any tier investment
     let upgradeAmount = tier.amount;
-
-    if (existingInvestments.length > 0) {
-      const highestExistingAmount = Math.max(...existingInvestments.map(inv => inv.amount));
-      if (amount <= highestExistingAmount) {
-        return res.status(400).json({
-          error: 'You can only invest in higher tier packages. Please upgrade to a higher amount.'
-        });
-      }
-      // Calculate upgrade amount (only pay the difference)
-      upgradeAmount = tier.amount - highestExistingAmount;
-    }
 
     const user = await User.findById(req.user._id);
     if (user.balance < upgradeAmount) {
@@ -138,14 +111,14 @@ exports.completeCycle = async (req, res) => {
       return res.status(400).json({ error: 'Cycle not completed yet' });
     }
 
-    // Block completing cycles on weekends
-    const now = new Date();
-    const dayOfWeek = now.getDay();
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
-      return res.status(400).json({
-        error: 'Earnings cannot be completed on weekends. Please wait until Monday.'
-      });
-    }
+    // TESTING: Remove weekend restrictions
+    // const now = new Date();
+    // const dayOfWeek = now.getDay();
+    // if (dayOfWeek === 0 || dayOfWeek === 6) {
+    //   return res.status(400).json({
+    //     error: 'Earnings cannot be completed on weekends. Please wait until Monday.'
+    //   });
+    // }
 
     // Get user's current score to calculate earnings multiplier
     const user = await User.findById(req.user._id);
@@ -161,19 +134,24 @@ exports.completeCycle = async (req, res) => {
       else earningsMultiplier = 0.5;                      // 50%
     }
 
-    // Special handling for $500 Mini tier - always exactly $21
+    // Special handling for $250 Micro and $500 Mini tiers - fixed earnings, no fees
     let grossEarning, netEarning, feeAmount, baseEarning;
     
-    if (investment.amount === 500 && investment.tier === 'Mini') {
+    if (investment.amount === 250 && investment.tier === 'Micro') {
+      baseEarning = 10;
+      grossEarning = 10; // Fixed $10, no score multiplier applied
+      feeAmount = 0; // No fee for Micro tier
+      netEarning = 10; // Always $10
+    } else if (investment.amount === 500 && investment.tier === 'Mini') {
       baseEarning = 21;
       grossEarning = 21; // Fixed $21, no score multiplier applied
       feeAmount = 0; // No fee for Mini tier
       netEarning = 21; // Always $21
     } else {
-      // Calculate earnings with multiplier applied for other tiers
+      // Calculate full daily earnings without score multiplier for gross amount
       baseEarning = (investment.amount * investment.dailyRate) / 100;
-      grossEarning = baseEarning * earningsMultiplier;
-      feeAmount = grossEarning * 0.15; // 15% fee
+      grossEarning = baseEarning; // Full daily rate for gross display
+      feeAmount = grossEarning * 0.15; // 15% fee on gross
       netEarning = grossEarning - feeAmount; // Net amount after fee
     }
 
@@ -185,13 +163,17 @@ exports.completeCycle = async (req, res) => {
     if (!investment.cycleEarnings) investment.cycleEarnings = [];
     investment.cycleEarnings.push({
       cycleNumber: investment.cyclesCompleted,
-      grossAmount: netEarning, // Store net amount for Mini tier to show $21
+      grossAmount: grossEarning, // Store actual gross amount
+      netAmount: netEarning, // Store net amount after fees
+      feeAmount: feeAmount, // Store fee amount
       completedAt: new Date(),
       withdrawalRequested: false
     });
 
-    // For Mini tier, always show $21 total regardless of previous earnings
-    if (investment.amount === 500 && investment.tier === 'Mini') {
+    // For Micro and Mini tiers, always show fixed amounts regardless of previous earnings
+    if (investment.amount === 250 && investment.tier === 'Micro') {
+      investment.totalEarned = 10; // Always show $10 for Micro tier
+    } else if (investment.amount === 500 && investment.tier === 'Mini') {
       investment.totalEarned = 21; // Always show $21 for Mini tier
     } else {
       investment.totalEarned = (investment.totalEarned || 0) + netEarning; // Accumulate for other tiers
